@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Geist_Mono, Inter } from 'next/font/google'
 
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { WalletProvider } from '@/lib/wallet-context'
 import './globals.css'
 
 const geistMono = Geist_Mono({
@@ -38,9 +39,11 @@ export default function RootLayout({
       <body
         className={`${geistMono.variable} ${inter.variable} font-mono antialiased`}
       >
-        <TooltipProvider delayDuration={200}>
-          {children}
-        </TooltipProvider>
+        <WalletProvider>
+          <TooltipProvider delayDuration={200}>
+            {children}
+          </TooltipProvider>
+        </WalletProvider>
       </body>
     </html>
   )

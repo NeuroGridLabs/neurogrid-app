@@ -1,15 +1,18 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { Header } from "@/components/modules/header"
+import { Navbar } from "@/components/layout/navbar"
 import { Footer } from "@/components/modules/footer"
 import { ScanlineOverlay } from "@/components/atoms/scanline-overlay"
 import { MinerForm } from "@/components/modules/miner-form"
 import { PricingSlider } from "@/components/modules/pricing-slider"
 import { HandshakeOverlay } from "@/components/modules/handshake-overlay"
 import { MinerConnectTerminal } from "@/components/modules/miner-connect-terminal"
+import { useWallet } from "@/lib/wallet-context"
+import { NeonButton } from "@/components/atoms/neon-button"
 
 export default function MinerPortal() {
+  const { isConnected, address, openConnectModal } = useWallet()
   const [handshakeActive, setHandshakeActive] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [connectTriggered, setConnectTriggered] = useState(false)
@@ -28,7 +31,7 @@ export default function MinerPortal() {
     <div className="flex min-h-screen flex-col" style={{ backgroundColor: "#050505" }}>
       <ScanlineOverlay />
       <HandshakeOverlay active={handshakeActive} onComplete={handleHandshakeComplete} />
-      <Header />
+      <Navbar />
 
       <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-6">
         {/* Title */}
@@ -48,6 +51,11 @@ export default function MinerPortal() {
           <p className="text-xs" style={{ color: "rgba(0,255,255,0.5)" }}>
             Register your GPU hardware, set pricing, and connect via FRP tunnel
           </p>
+          {!isConnected && (
+            <p className="mt-2 text-xs font-medium" style={{ color: "#00FF41" }}>
+              Please Connect Wallet to Proceed
+            </p>
+          )}
         </div>
 
         {submitted && (
@@ -74,8 +82,48 @@ export default function MinerPortal() {
           <PricingSlider />
         </div>
 
-        {/* Connect Terminal - simulates [NET]/[PHY]/[SYS] output on Connect */}
-        <MinerConnectTerminal connectTriggered={connectTriggered} />
+        {/* Terminal with auth overlay */}
+        <div className="relative">
+          {!isConnected && (
+            <div
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3"
+              style={{
+                backgroundColor: "rgba(5,5,5,0.85)",
+                backdropFilter: "blur(4px)",
+              }}
+            >
+              <p className="text-center text-sm font-bold uppercase tracking-wider" style={{ color: "#00FF41" }}>
+                Authentication Required: Connect Wallet to Sync Miner Identity
+              </p>
+              <NeonButton
+                variant="primary"
+                accentColor="#00FF41"
+                onClick={openConnectModal}
+              >
+                Connect Wallet
+              </NeonButton>
+            </div>
+          )}
+          <MinerConnectTerminal
+            connectTriggered={connectTriggered}
+            isConnected={isConnected}
+            walletAddress={address ?? undefined}
+          />
+          {isConnected && (
+            <div className="mt-2 flex items-center gap-2">
+              <NeonButton
+                variant="primary"
+                accentColor="#00FF41"
+                className="text-xs px-4 py-2"
+              >
+                Download Miner Config (FRP)
+              </NeonButton>
+              <span className="text-xs" style={{ color: "rgba(0,255,65,0.4)" }}>
+                Wallet verified · Config unlocked
+              </span>
+            </div>
+          )}
+        </div>
       </main>
 
       <Footer />

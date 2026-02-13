@@ -23,10 +23,22 @@ function getTimestamp() {
 
 interface MinerConnectTerminalProps {
   connectTriggered: boolean
+  isConnected?: boolean
+  walletAddress?: string
 }
 
-export function MinerConnectTerminal({ connectTriggered }: MinerConnectTerminalProps) {
+export function MinerConnectTerminal({ connectTriggered, isConnected, walletAddress }: MinerConnectTerminalProps) {
   const [visibleLines, setVisibleLines] = useState<LogLine[]>([])
+
+  // When connected, prepend [SYS] Wallet Verified
+  const walletLine: LogLine | null =
+    isConnected && walletAddress
+      ? {
+          type: "SYSTEM",
+          content: `Wallet Verified: ${walletAddress.slice(0, 10)}...${walletAddress.slice(-8)}`,
+          timestamp: getTimestamp(),
+        }
+      : null
 
   useEffect(() => {
     if (!connectTriggered) {
@@ -70,10 +82,13 @@ export function MinerConnectTerminal({ connectTriggered }: MinerConnectTerminalP
             "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,65,0.01) 2px, rgba(0,255,65,0.01) 4px)",
         }}
       >
-        {visibleLines.length === 0 && !connectTriggered && (
+        {visibleLines.length === 0 && !connectTriggered && !walletLine && (
           <div className="px-2 py-1 text-xs" style={{ color: "rgba(0,255,65,0.3)" }}>
             Click Connect Core via FRP to simulate sync...
           </div>
+        )}
+        {walletLine && (
+          <TerminalLog type={walletLine.type} message={walletLine.content} timestamp={walletLine.timestamp} />
         )}
         {visibleLines.map((line, i) => (
           <TerminalLog

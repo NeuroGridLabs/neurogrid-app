@@ -1,6 +1,6 @@
 "use client"
 
-import { Header } from "@/components/modules/header"
+import { Navbar } from "@/components/layout/navbar"
 import { Footer } from "@/components/modules/footer"
 import { ScanlineOverlay } from "@/components/atoms/scanline-overlay"
 import { HeroSection } from "@/components/modules/hero-section"
@@ -12,7 +12,7 @@ export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col" style={{ backgroundColor: "#050505" }}>
       <ScanlineOverlay />
-      <Header />
+      <Navbar />
       <main className="flex-1">
         <HeroSection />
         <GenesisLive />

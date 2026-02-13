@@ -5,6 +5,11 @@ import { StatusBadge, type BadgeStatus } from "@/components/atoms/status-badge"
 import { GpuBar } from "@/components/atoms/gpu-bar"
 import { NeonButton } from "@/components/atoms/neon-button"
 
+interface NodeClusterProps {
+  isConnected?: boolean
+  onDeployClick?: () => void
+}
+
 interface Node {
   id: string
   name: string
@@ -47,7 +52,7 @@ const INITIAL_NODES: Node[] = [
   },
 ]
 
-export function NodeCluster() {
+export function NodeCluster({ isConnected = false, onDeployClick }: NodeClusterProps) {
   const [nodes, setNodes] = useState(INITIAL_NODES)
 
   useEffect(() => {
@@ -120,13 +125,28 @@ export function NodeCluster() {
               color={node.isGenesis ? "#00FFFF" : "#00FF41"}
             />
             {node.isGenesis && (
-              <div className="mt-1 flex items-center gap-2">
+              <div className="mt-1 flex flex-wrap items-center gap-2">
                 <NeonButton variant="secondary" accentColor="#00FFFF" className="text-xs px-3 py-1.5">
                   Reboot Tunnel
                 </NeonButton>
                 <NeonButton variant="ghost" accentColor="#00FFFF" className="text-xs px-3 py-1.5">
                   Update Pricing
                 </NeonButton>
+                {onDeployClick && (
+                  <div className="flex w-full flex-col gap-1">
+                    <NeonButton
+                      variant="primary"
+                      accentColor="#00FF41"
+                      className="text-xs px-3 py-1.5"
+                      onClick={onDeployClick}
+                    >
+                      Deploy via NeuroGrid
+                    </NeonButton>
+                    <span className="text-[10px]" style={{ color: "rgba(0,255,65,0.4)" }}>
+                      100% of Protocol Fees support the $NRG Hard-Asset Floor.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

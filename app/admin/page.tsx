@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Header } from "@/components/modules/header"
+import { Navbar } from "@/components/layout/navbar"
 import { Footer } from "@/components/modules/footer"
 import { ScanlineOverlay } from "@/components/atoms/scanline-overlay"
 import { NodeCluster } from "@/components/modules/node-cluster"
@@ -14,7 +14,7 @@ export default function AdminDashboard() {
   return (
     <div className="flex min-h-screen flex-col" style={{ backgroundColor: "#050505" }}>
       <ScanlineOverlay />
-      <Header />
+      <Navbar />
 
       <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-6">
         {/* Title */}
