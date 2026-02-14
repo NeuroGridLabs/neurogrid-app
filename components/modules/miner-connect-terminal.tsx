@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { TerminalLog } from "@/components/atoms/terminal-log"
 
 // v3.2: Multi-chain sync sequence — aligned with whitepaper
@@ -27,10 +27,14 @@ interface MinerConnectTerminalProps {
   walletAddress?: string
 }
 
+const LINE_HEIGHT_REM = 1.75
+const VISIBLE_LINES = 8
+const VIEWPORT_HEIGHT_REM = LINE_HEIGHT_REM * VISIBLE_LINES
+
 export function MinerConnectTerminal({ connectTriggered, isConnected, walletAddress }: MinerConnectTerminalProps) {
   const [visibleLines, setVisibleLines] = useState<LogLine[]>([])
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
-  // When connected, prepend [SYS] Wallet Verified
   const walletLine: LogLine | null =
     isConnected && walletAddress
       ? {
@@ -39,6 +43,8 @@ export function MinerConnectTerminal({ connectTriggered, isConnected, walletAddr
           timestamp: getTimestamp(),
         }
       : null
+  const allLines = [...(walletLine ? [walletLine] : []), ...visibleLines]
+  const displayLines = allLines.slice(-VISIBLE_LINES)
 
   useEffect(() => {
     if (!connectTriggered) {
@@ -76,21 +82,20 @@ export function MinerConnectTerminal({ connectTriggered, isConnected, walletAddr
         </span>
       </div>
       <div
-        className="min-h-24 max-h-40 overflow-y-auto p-3"
+        ref={scrollContainerRef}
+        className="overflow-x-hidden overflow-y-hidden p-3"
         style={{
+          height: `${VIEWPORT_HEIGHT_REM}rem`,
           background:
             "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,65,0.01) 2px, rgba(0,255,65,0.01) 4px)",
         }}
       >
-        {visibleLines.length === 0 && !connectTriggered && !walletLine && (
+        {displayLines.length === 0 && !connectTriggered && (
           <div className="px-2 py-1 text-xs" style={{ color: "rgba(0,255,65,0.3)" }}>
             Click Connect Core via FRP to simulate sync...
           </div>
         )}
-        {walletLine && (
-          <TerminalLog type={walletLine.type} message={walletLine.content} timestamp={walletLine.timestamp} />
-        )}
-        {visibleLines.map((line, i) => (
+        {displayLines.map((line, i) => (
           <TerminalLog
             key={i}
             type={line.type}

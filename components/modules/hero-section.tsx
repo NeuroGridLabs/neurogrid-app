@@ -55,7 +55,7 @@ function Gpu4090Render() {
       >
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold tracking-wider" style={{ color: "#00FFFF" }}>
-            RTX 4090
+            RTX4090
           </span>
           <StatusBadge status="VERIFIED" />
         </div>

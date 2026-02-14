@@ -3,6 +3,7 @@ import { Geist_Mono, Inter } from 'next/font/google'
 
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WalletProvider } from '@/lib/wallet-context'
+import { MinerRegistryProvider } from '@/lib/miner-registry-context'
 import './globals.css'
 
 const geistMono = Geist_Mono({
@@ -19,7 +20,7 @@ export const metadata: Metadata = {
   title: 'NeuroGrid Protocol | The Liquidity Layer for AI Compute',
   description:
     'Decentralized GPU computing exchange powered by FRP tunneling and Proof-of-Inference. Community-driven, anti-VC, fair launch.',
-  keywords: ['GPU', 'decentralized', 'computing', 'AI', 'blockchain', 'PoI', 'RTX 4090'],
+  keywords: ['GPU', 'decentralized', 'computing', 'AI', 'blockchain', 'PoI', 'RTX4090'],
   icons: {
     icon: '/images/neurogrid-logo.png',
   },
@@ -40,9 +41,11 @@ export default function RootLayout({
         className={`${geistMono.variable} ${inter.variable} font-mono antialiased`}
       >
         <WalletProvider>
-          <TooltipProvider delayDuration={200}>
-            {children}
-          </TooltipProvider>
+          <MinerRegistryProvider>
+            <TooltipProvider delayDuration={200}>
+              {children}
+            </TooltipProvider>
+          </MinerRegistryProvider>
         </WalletProvider>
       </body>
     </html>

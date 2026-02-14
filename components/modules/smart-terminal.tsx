@@ -19,8 +19,8 @@ interface TerminalLine {
 const INITIAL_LINES: TerminalLine[] = [
   { type: "SYSTEM", content: "NeuroGrid Protocol v3.0 -- Admin Terminal" },
   { type: "SYSTEM", content: "Type 'help' for available commands." },
-  { type: "NETWORK", content: "Genesis Node Alpha-01 [ONLINE] | RTX 4090 | 24GB VRAM | FRP: blancopuff.xyz" },
-  { type: "PHYSICAL", content: "GPU temp: 64C | VRAM: 18.4/24 GB | Fan: 72%" },
+  { type: "NETWORK", content: "Genesis Node Alpha-01 [ONLINE] | RTX4090 | 24GB VRAM | [Encrypted Tunnel Ready]" },
+  { type: "PHYSICAL", content: "GPU temp: 64C | VRAM: 18.4/24GB | Fan: 72%" },
   { type: "NETWORK", content: "FRP tunnel status: ACTIVE | Latency: 12ms | Uptime: 99.97%" },
 ]
 
@@ -37,17 +37,17 @@ const COMMAND_MAP: Record<string, TerminalLine[]> = {
   ],
   status: [
     { type: "PHYSICAL", content: "NODE STATUS: Alpha-01 [ONLINE]" },
-    { type: "PHYSICAL", content: "GPU 0: RTX 4090 | 24GB | Temp: 64C | Load: 87%" },
-    { type: "PHYSICAL", content: "VRAM Used: 18.4/24 GB (76.7%)" },
+    { type: "PHYSICAL", content: "GPU 0: RTX4090 | 24GB | Temp: 64C | Load: 87%" },
+    { type: "PHYSICAL", content: "VRAM Used: 18.4/24GB (76.7%)" },
     { type: "NETWORK", content: "Inference Queue: 14 jobs | Avg: 340ms" },
     { type: "NETWORK", content: "PoI Verifications: 2,847 (24h)" },
     { type: "NETWORK", content: "Revenue: 0.0847 ETH (24h)" },
   ],
   nodes: [
     { type: "NETWORK", content: "Connected Nodes (3):" },
-    { type: "PHYSICAL", content: "  [1] Alpha-01  | RTX 4090 | 24GB  | ACTIVE  | blancopuff.xyz" },
-    { type: "NETWORK", content: "  [2] Beta-07   | RTX 4090 | 24GB  | ACTIVE  | node-beta.ngrid" },
-    { type: "NETWORK", content: "  [3] Gamma-12  | 4x A100  | 320GB | SYNCING | datacenter-eu.ngrid" },
+    { type: "PHYSICAL", content: "  [1] Alpha-01  | RTX4090 | 24GB  | ACTIVE  | [Tunnel Ready]" },
+    { type: "NETWORK", content: "  [2] Beta-07   | RTX4090 | 24GB  | ACTIVE  | [Tunnel Ready]" },
+    { type: "NETWORK", content: "  [3] Gamma-12  | 4x A100  | 320GB | SYNCING | [Tunnel Ready]" },
   ],
   pool: [
     { type: "NETWORK", content: "Macro Reserve Pool:" },
@@ -58,7 +58,7 @@ const COMMAND_MAP: Record<string, TerminalLine[]> = {
   ],
   tunnel: [
     { type: "NETWORK", content: "FRP Tunnel Diagnostics:" },
-    { type: "NETWORK", content: "  Gateway: blancopuff.xyz:443" },
+    { type: "NETWORK", content: "  Gateway: [Encrypted Tunnel Ready]" },
     { type: "NETWORK", content: "  Protocol: TLS 1.3 + QUIC" },
     { type: "PHYSICAL", content: "  Latency: 12ms (avg) | 8ms (p50) | 24ms (p99)" },
     { type: "PHYSICAL", content: "  Bandwidth: 847 / 1000 Mbps" },
@@ -101,24 +101,21 @@ export function SmartTerminal({
   const inputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Auto-feed live logs
+  // Slow auto-feed — viewport is fixed, no layout jump
   useEffect(() => {
     const messages: TerminalLine[] = [
-      { type: "NETWORK", content: "FRP heartbeat: blancopuff.xyz -> Alpha-01 (12ms)" },
+      { type: "NETWORK", content: "FRP heartbeat: [Gateway] -> Alpha-01 (12ms)" },
       { type: "PHYSICAL", content: "GPU temp stable: 64C | Fan: 72%" },
       { type: "NETWORK", content: "PoI challenge #12,484: Alpha-01 PASSED" },
       { type: "NETWORK", content: "Inference job #47,292 completed (LLaMA-70B, 338ms)" },
-      { type: "PHYSICAL", content: "VRAM allocation: 18.6/24 GB" },
+      { type: "PHYSICAL", content: "VRAM allocation: 18.6/24GB" },
     ]
     let i = 0
     const interval = setInterval(() => {
       const msg = messages[i % messages.length]
-      setLines((prev) => [
-        ...prev,
-        { ...msg, timestamp: getTimestamp() },
-      ])
+      setLines((prev) => [...prev, { ...msg, timestamp: getTimestamp() }])
       i++
-    }, 4000)
+    }, 8000)
     return () => clearInterval(interval)
   }, [])
 
@@ -283,10 +280,11 @@ export function SmartTerminal({
         </div>
       </div>
 
-      {/* Terminal body */}
+      {/* Terminal body — fixed 6-line viewport, no jump */}
       <div
         ref={scrollRef}
-        className="relative max-h-72 min-h-48 flex-1 cursor-text overflow-y-auto p-3 md:max-h-96"
+        className="relative cursor-text overflow-y-auto overflow-x-hidden p-3"
+        style={{ height: "10.5rem" }}
         onClick={() => inputRef.current?.focus()}
       >
         <div

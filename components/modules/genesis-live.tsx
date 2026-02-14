@@ -10,7 +10,7 @@ export function GenesisLive() {
   const [load, setLoad] = useState(82)
   const [uptime, setUptime] = useState("47d 12h 33m")
 
-  // Dynamic real-time stream: 1x RTX 4090 (24GB VRAM), base price anchored $0.59/hr
+  // Dynamic real-time stream: 1x RTX4090 (24GB VRAM), base price anchored $0.59/hr
   useEffect(() => {
     const interval = setInterval(() => {
       setTemp(60 + Math.floor(Math.random() * 10))
@@ -47,7 +47,7 @@ export function GenesisLive() {
                 Alpha-01
               </span>
               <span className="text-xs" style={{ color: "rgba(0,255,255,0.4)" }}>
-                RTX 4090 | blancopuff.xyz
+                RTX4090 | [Encrypted Tunnel]
               </span>
             </div>
             <span className="text-xs" style={{ color: "rgba(0,255,65,0.4)" }}>

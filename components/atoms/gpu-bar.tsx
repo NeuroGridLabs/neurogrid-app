@@ -1,9 +1,10 @@
 interface GpuBarProps {
   value: number
   color?: string
+  hideLabel?: boolean
 }
 
-export function GpuBar({ value, color = "#00FF41" }: GpuBarProps) {
+export function GpuBar({ value, color = "#00FF41", hideLabel }: GpuBarProps) {
   return (
     <div className="flex items-center gap-2">
       <div
@@ -19,9 +20,11 @@ export function GpuBar({ value, color = "#00FF41" }: GpuBarProps) {
           }}
         />
       </div>
-      <span className="w-8 text-right text-xs" style={{ color }}>
-        {value}%
-      </span>
+      {!hideLabel && (
+        <span className="w-8 shrink-0 text-right text-xs" style={{ color }}>
+          {value}%
+        </span>
+      )}
     </div>
   )
 }

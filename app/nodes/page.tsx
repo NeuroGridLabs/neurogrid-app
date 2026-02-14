@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { Navbar } from "@/components/layout/navbar"
 import { Footer } from "@/components/modules/footer"
 import { ScanlineOverlay } from "@/components/atoms/scanline-overlay"
-import { NodeCluster } from "@/components/modules/node-cluster"
+import { NodeCluster, type RentedNodeSnapshot } from "@/components/modules/node-cluster"
+import { RentedNodesPanel } from "@/components/modules/rented-nodes-panel"
 import { SmartTerminal } from "@/components/modules/smart-terminal"
 import { TreasuryViz } from "@/components/modules/treasury-viz"
 import { useWallet } from "@/lib/wallet-context"
@@ -14,11 +15,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ArrowRight, TrendingUp } from "lucide-react"
 
 export default function NodesPage() {
-  const { isConnected, openConnectModal } = useWallet()
+  const { isConnected, address, openConnectModal } = useWallet()
   const [terminalMinimized, setTerminalMinimized] = useState(false)
   const [deployModalOpen, setDeployModalOpen] = useState(false)
+  const [myRentedNodes, setMyRentedNodes] = useState<RentedNodeSnapshot[]>([])
+  const [triggerUndeployNodeId, setTriggerUndeployNodeId] = useState<string | null>(null)
+
+  const handleDeployComplete = useCallback((node: RentedNodeSnapshot) => {
+    setMyRentedNodes((prev) => [...prev, node])
+  }, [])
+  const handleUndeployComplete = useCallback((nodeId: string) => {
+    setMyRentedNodes((prev) => prev.filter((n) => n.id !== nodeId))
+    setTriggerUndeployNodeId(null)
+  }, [])
+  const handleUndeployFromPanel = useCallback((nodeId: string) => {
+    setTriggerUndeployNodeId(nodeId)
+  }, [])
+  const handleUndeployModalOpen = useCallback(() => {
+    setTriggerUndeployNodeId(null)
+  }, [])
 
   const handleDeployClick = () => {
     if (!isConnected) openConnectModal()
@@ -31,7 +49,7 @@ export default function NodesPage() {
       <Navbar />
 
       <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-6">
-        {/* Title - 算力超市 */}
+        {/* Title - Compute Marketplace */}
         <div
           className="flex flex-col gap-1 border border-border p-4"
           style={{ backgroundColor: "rgba(0,255,65,0.02)" }}
@@ -42,28 +60,51 @@ export default function NodesPage() {
             </h1>
             <span className="text-xs" style={{ color: "rgba(0,255,65,0.3)" }}>|</span>
             <span className="text-xs" style={{ color: "rgba(0,255,65,0.4)" }}>
-              算力超市 · Compute Marketplace
+              Compute Marketplace
             </span>
           </div>
           <p className="text-xs" style={{ color: "rgba(0,255,65,0.5)" }}>
             Rent decentralized GPU compute — Physical hardware verified via Proof-of-Inference
           </p>
-          {!isConnected && (
-            <p className="mt-2 text-xs font-medium" style={{ color: "#00FF41" }}>
-              Please Connect Wallet to Proceed
-            </p>
-          )}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {!isConnected && (
+              <p className="text-xs font-medium" style={{ color: "#00FF41" }}>
+                Please Connect Wallet to Proceed
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleDeployClick}
+              className="border px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors hover:opacity-90"
+              style={{ borderColor: "#00FF41", color: "#00FF41" }}
+            >
+              Deploy via NeuroGrid
+            </button>
+          </div>
         </div>
 
         {/* Grid: Nodes + Treasury */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <NodeCluster
             isConnected={isConnected}
-            onDeployClick={handleDeployClick}
+            walletAddress={address}
+            openConnectModal={openConnectModal}
+            onDeployComplete={handleDeployComplete}
+            onUndeployComplete={handleUndeployComplete}
+            triggerUndeployNodeId={triggerUndeployNodeId}
+            onUndeployModalOpen={handleUndeployModalOpen}
           />
           <TreasuryViz />
         </div>
 
+        {/* My Rented Nodes: only nodes ordered by connected wallet; 2 per row, scroll for more */}
+        {isConnected && (
+          <RentedNodesPanel
+            walletAddress={address}
+            rentedNodes={myRentedNodes}
+            onUndeploy={handleUndeployFromPanel}
+          />
+        )}
         {/* Terminal */}
         <SmartTerminal
           isMinimized={terminalMinimized}
@@ -89,20 +130,31 @@ export default function NodesPage() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-xs" style={{ color: "rgba(0,255,65,0.6)" }}>
-              100% of Protocol Fees support the $NRG Hard-Asset Floor.
+              100% of Protocol Fees (5%) → Buyback Engine → $NRG Floor Price Appreciation.
             </p>
+            {/* v3.4 Flywheel diagram */}
             <div
-              className="border p-4"
+              className="flex flex-col items-center gap-2 border p-4"
               style={{
                 borderColor: "rgba(0,255,65,0.2)",
                 backgroundColor: "rgba(0,255,65,0.03)",
               }}
             >
-              <p className="mb-2 text-xs font-bold uppercase" style={{ color: "#00FF41" }}>
-                100% Protocol Buyback Engine
-              </p>
-              <p className="text-xs" style={{ color: "rgba(0,255,65,0.6)" }}>
-                All deployment fees flow into the $NRG buyback engine to strengthen the hard-asset floor.
+              <div className="flex flex-wrap items-center justify-center gap-2 text-xs" style={{ color: "#00FF41" }}>
+                <span className="flex items-center gap-1">
+                  Usage <TrendingUp className="h-3.5 w-3.5" />
+                </span>
+                <ArrowRight className="h-4 w-4 shrink-0" style={{ color: "rgba(0,255,65,0.5)" }} />
+                <span className="flex items-center gap-1">
+                  Buyback <TrendingUp className="h-3.5 w-3.5" />
+                </span>
+                <ArrowRight className="h-4 w-4 shrink-0" style={{ color: "rgba(0,255,65,0.5)" }} />
+                <span className="flex items-center gap-1">
+                  Floor Price <TrendingUp className="h-3.5 w-3.5" />
+                </span>
+              </div>
+              <p className="text-[10px]" style={{ color: "rgba(0,255,65,0.5)" }}>
+                100% of Protocol Fees (5%) → Buyback Engine → $NRG Floor Price Appreciation
               </p>
             </div>
             <div className="flex gap-2">

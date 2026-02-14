@@ -158,7 +158,7 @@ export function ProtocolStats() {
           <StatCard
             label="Network Rate"
             value="$0.59/hr"
-            sub="RTX 4090 base price"
+            sub="RTX4090 base price"
             icon={<Zap className="h-4 w-4" />}
             accentColor="#00FFFF"
           />
