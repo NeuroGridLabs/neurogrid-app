@@ -1,120 +1,64 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
-import { StatCard } from "@/components/atoms/stat-card"
-import { Shield, TrendingUp, ArrowDownRight } from "lucide-react"
+import { useRef, useEffect } from "react"
+import { useTreasuryData } from "@/components/modules/treasury-api"
+import type { TreasuryAsset } from "@/lib/treasury-api"
 
-function TreasuryChart() {
+const ASSET_COLORS: Record<string, string> = {
+  BTC: "#F7931A",
+  SOL: "#00FFA3",
+  NRG: "#00FF41",
+  "Sui/ETH": "#6FBDF0",
+}
+
+function AllocationChart({ assets }: { assets: TreasuryAsset[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const dataRef = useRef<number[]>([])
-  const frameRef = useRef(0)
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas || assets.length === 0) return
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
-    // Initialize data
-    if (dataRef.current.length === 0) {
-      dataRef.current = Array.from({ length: 60 }, (_, i) =>
-        10 + Math.sin(i * 0.1) * 2 + i * 0.04
-      )
-    }
+    const rect = canvas.parentElement?.getBoundingClientRect()
+    if (!rect) return
+    const dpr = 2
+    canvas.width = rect.width * dpr
+    canvas.height = rect.height * dpr
+    ctx.scale(dpr, dpr)
+    const w = rect.width
+    const h = rect.height
 
-    const resize = () => {
-      const rect = canvas.parentElement?.getBoundingClientRect()
-      if (!rect) return
-      canvas.width = rect.width * 2
-      canvas.height = rect.height * 2
-      ctx.scale(2, 2)
-    }
-    resize()
+    const total = assets.reduce((s, a) => s + a.usdValue, 0)
+    if (total <= 0) return
 
-    let lastUpdate = 0
-    const draw = (time: number) => {
-      const rect = canvas.parentElement?.getBoundingClientRect()
-      if (!rect) return
-      const w = rect.width
-      const h = rect.height
+    let start = -0.5 * Math.PI
+    const cx = w / 2
+    const cy = h / 2
+    const r = Math.min(w, h) / 2 - 4
 
-      // Add data point every 500ms
-      if (time - lastUpdate > 500) {
-        const last = dataRef.current[dataRef.current.length - 1]
-        dataRef.current.push(last + (Math.random() - 0.3) * 0.1)
-        if (dataRef.current.length > 120) dataRef.current.shift()
-        lastUpdate = time
-      }
-
-      ctx.clearRect(0, 0, w, h)
-      const data = dataRef.current
-      const minV = Math.min(...data) - 0.5
-      const maxV = Math.max(...data) + 0.5
-      const range = maxV - minV
-
-      // Grid lines
-      ctx.strokeStyle = "rgba(0,255,65,0.06)"
-      ctx.lineWidth = 0.5
-      for (let i = 0; i < 5; i++) {
-        const y = (i / 4) * h
-        ctx.beginPath()
-        ctx.moveTo(0, y)
-        ctx.lineTo(w, y)
-        ctx.stroke()
-      }
-
-      // Line
-      ctx.strokeStyle = "#00FF41"
-      ctx.lineWidth = 1.5
+    assets.forEach((asset) => {
+      const ratio = asset.usdValue / total
+      const end = start + ratio * 2 * Math.PI
       ctx.beginPath()
-      data.forEach((v, i) => {
-        const x = (i / (data.length - 1)) * w
-        const y = h - ((v - minV) / range) * h
-        if (i === 0) ctx.moveTo(x, y)
-        else ctx.lineTo(x, y)
-      })
-      ctx.stroke()
-
-      // Fill under
-      const lastX = w
-      const lastY = h - ((data[data.length - 1] - minV) / range) * h
-      ctx.lineTo(lastX, h)
-      ctx.lineTo(0, h)
+      ctx.moveTo(cx, cy)
+      ctx.arc(cx, cy, r, start, end)
       ctx.closePath()
-      const grad = ctx.createLinearGradient(0, 0, 0, h)
-      grad.addColorStop(0, "rgba(0,255,65,0.15)")
-      grad.addColorStop(1, "rgba(0,255,65,0)")
-      ctx.fillStyle = grad
+      ctx.fillStyle = ASSET_COLORS[asset.symbol] ?? "rgba(0,255,65,0.5)"
       ctx.fill()
-
-      // Current value dot
-      ctx.fillStyle = "#00FF41"
-      ctx.shadowColor = "#00FF41"
-      ctx.shadowBlur = 10
-      ctx.beginPath()
-      ctx.arc(lastX, lastY, 3, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.shadowBlur = 0
-
-      frameRef.current = requestAnimationFrame(draw)
-    }
-
-    frameRef.current = requestAnimationFrame(draw)
-    const observer = new ResizeObserver(resize)
-    if (canvas.parentElement) observer.observe(canvas.parentElement)
-
-    return () => {
-      cancelAnimationFrame(frameRef.current)
-      observer.disconnect()
-    }
-  }, [])
+      ctx.strokeStyle = "var(--terminal-bg)"
+      ctx.lineWidth = 2
+      ctx.stroke()
+      start = end
+    })
+  }, [assets])
 
   return (
-    <div className="relative h-40 w-full md:h-52">
+    <div className="relative h-40 w-full md:h-52 flex items-center justify-center">
       <canvas
         ref={canvasRef}
-        className="h-full w-full"
-        aria-label="Treasury reserve inflow chart"
+        className="max-h-full w-full"
+        aria-label="Treasury asset allocation"
         role="img"
       />
     </div>
@@ -122,14 +66,7 @@ function TreasuryChart() {
 }
 
 export function TreasuryViz() {
-  const [balance, setBalance] = useState(12.847)
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setBalance((b) => +(b + Math.random() * 0.005).toFixed(3))
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [])
+  const { data, loading, error, refetch } = useTreasuryData()
 
   return (
     <div
@@ -144,26 +81,82 @@ export function TreasuryViz() {
           Treasury Monitor
         </span>
         <span className="text-xs" style={{ color: "rgba(0,255,65,0.4)" }}>
-          2% Reserve Inflow
+          Live on-chain · 45/20/15/20
         </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-px" style={{ backgroundColor: "rgba(0,255,65,0.05)" }}>
-        <div className="flex flex-col gap-1 p-3" style={{ backgroundColor: "var(--terminal-bg)" }}>
-          <span className="text-xs" style={{ color: "rgba(0,255,65,0.4)" }}>Balance</span>
-          <span className="text-sm font-bold" style={{ color: "#00FF41" }}>{balance} ETH</span>
+      {loading && (
+        <div className="flex flex-col gap-3 p-4" style={{ color: "rgba(0,255,65,0.6)" }}>
+          <div className="text-xs font-medium" style={{ color: "#00FF41" }}>
+            Status: Epoch 0 (Genesis Bootstrapping)
+          </div>
+          <div className="font-mono text-[10px] break-all" style={{ color: "rgba(0,255,65,0.5)" }}>
+            Active Vault: AmKdMDFTYRXUHPxcXjvJxMM1xZeAmR6rmeNj2t2cWH3h
+          </div>
+          <div className="text-xs" style={{ color: "rgba(255,200,0,0.9)" }}>
+            [Listening] Awaiting first node deployment to route 5% protocol fees.
+          </div>
         </div>
-        <div className="flex flex-col gap-1 p-3" style={{ backgroundColor: "var(--terminal-bg)" }}>
-          <span className="text-xs" style={{ color: "rgba(0,255,65,0.4)" }}>24h Inflow</span>
-          <span className="text-sm font-bold" style={{ color: "#00FF41" }}>+0.234 ETH</span>
-        </div>
-        <div className="flex flex-col gap-1 p-3" style={{ backgroundColor: "var(--terminal-bg)" }}>
-          <span className="text-xs" style={{ color: "rgba(0,255,65,0.4)" }}>Last Buyback</span>
-          <span className="text-sm font-bold" style={{ color: "#00FF41" }}>0.08 ETH</span>
-        </div>
-      </div>
+      )}
 
-      <TreasuryChart />
+      {error && (
+        <div className="flex flex-col gap-3 p-4" style={{ color: "rgba(0,255,65,0.6)" }}>
+          <div className="text-xs font-medium" style={{ color: "#00FF41" }}>
+            Status: Epoch 0 (Genesis Bootstrapping)
+          </div>
+          <div className="font-mono text-[10px] break-all" style={{ color: "rgba(0,255,65,0.5)" }}>
+            Active Vault: AmKdMDFTYRXUHPxcXjvJxMM1xZeAmR6rmeNj2t2cWH3h
+          </div>
+          <div className="text-xs" style={{ color: "rgba(255,200,0,0.9)" }}>
+            [Listening] Awaiting first node deployment to route 5% protocol fees.
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && data && (
+        <>
+          <div className="grid grid-cols-3 gap-px" style={{ backgroundColor: "rgba(0,255,65,0.05)" }}>
+            <div className="flex flex-col gap-1 p-3" style={{ backgroundColor: "var(--terminal-bg)" }}>
+              <span className="text-xs" style={{ color: "rgba(0,255,65,0.4)" }}>Total Reserve</span>
+              <span className="text-sm font-bold tabular-nums" style={{ color: "#00FF41" }}>
+                ${data.totalReserveUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1 p-3" style={{ backgroundColor: "var(--terminal-bg)" }}>
+              <span className="text-xs" style={{ color: "rgba(0,255,65,0.4)" }}>P_floor</span>
+              <span className="text-sm font-bold tabular-nums" style={{ color: "#00FF41" }}>
+                ${data.pFloor.toFixed(4)}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1 p-3" style={{ backgroundColor: "var(--terminal-bg)" }}>
+              <span className="text-xs" style={{ color: "rgba(0,255,65,0.4)" }}>Eco Pool</span>
+              <span className="text-sm font-bold tabular-nums" style={{ color: "#00FF41" }}>
+                ${data.ecoPoolBalanceUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          </div>
+
+          <AllocationChart assets={data.assets} />
+
+          <div
+            className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-border px-4 py-2"
+            style={{ borderColor: "rgba(0,255,65,0.08)" }}
+          >
+            {data.assets.map((a) => (
+              <span key={a.symbol} className="flex items-center gap-1.5 text-xs">
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ backgroundColor: ASSET_COLORS[a.symbol] ?? "#00FF41" }}
+                />
+                <span style={{ color: "rgba(0,255,65,0.7)" }}>{a.symbol}</span>
+                <span style={{ color: "#00FF41" }}>
+                  ${a.usdValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </span>
+              </span>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

@@ -77,7 +77,7 @@ export function Header() {
               className="inline-block h-1.5 w-1.5 rounded-full animate-pulse"
               style={{ backgroundColor: "#00FF41", boxShadow: "0 0 6px #00FF41" }}
             />
-            MAINNET ALPHA
+            GENESIS BOOTSTRAPPING
           </div>
         </nav>
 

@@ -39,7 +39,7 @@ function Gpu4090Render() {
         <polygon
           points="110,10 200,60 200,160 110,210 20,160 20,60"
           fill="none"
-          stroke="#00FF41"
+          stroke="#00FFFF"
           strokeWidth="1"
         />
       </svg>
@@ -57,17 +57,17 @@ function Gpu4090Render() {
           <span className="text-xs font-bold tracking-wider" style={{ color: "#00FFFF" }}>
             RTX4090
           </span>
-          <StatusBadge status="VERIFIED" />
+          <StatusBadge status="STANDBY" />
         </div>
         <div
           className="flex flex-col items-center gap-1 border-t pt-3"
           style={{ borderColor: "rgba(0,255,255,0.15)" }}
         >
           <span className="text-2xl font-bold" style={{ color: "#00FFFF" }}>
-            GENESIS_PROVED
+            GENESIS_LOCKED
           </span>
           <span className="text-xs" style={{ color: "rgba(0,255,255,0.5)" }}>
-            Hardware Fingerprint Verified via PoI
+            Specs locked · Awaiting ignition
           </span>
         </div>
         <div className="mt-2 grid grid-cols-3 gap-4 text-center">
@@ -76,11 +76,11 @@ function Gpu4090Render() {
             <span className="text-xs" style={{ color: "rgba(0,255,255,0.4)" }}>VRAM</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-xs font-bold" style={{ color: "#00FFFF" }}>21Gbps</span>
-            <span className="text-xs" style={{ color: "rgba(0,255,255,0.4)" }}>BW</span>
+            <span className="text-xs font-bold" style={{ color: "#00FFFF" }}>31GB</span>
+            <span className="text-xs" style={{ color: "rgba(0,255,255,0.4)" }}>RAM</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-xs font-bold" style={{ color: "#00FFFF" }}>8</span>
+            <span className="text-xs font-bold" style={{ color: "#00FFFF" }}>6</span>
             <span className="text-xs" style={{ color: "rgba(0,255,255,0.4)" }}>vCPUs</span>
           </div>
         </div>

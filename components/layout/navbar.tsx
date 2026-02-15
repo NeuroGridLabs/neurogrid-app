@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Menu, X } from "lucide-react"
-import { useWallet } from "@/lib/wallet-context"
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui"
 
 const NAV_LINKS = [
   { label: "Home", href: "/" },
@@ -12,35 +12,6 @@ const NAV_LINKS = [
   { label: "Miner", href: "/miner" },
   { label: "Docs", href: "https://docs.neurogridprotocol.io", external: true },
 ]
-
-function ConnectButton() {
-  const { isConnected, address, openConnectModal, openAccountModal } = useWallet()
-
-  if (isConnected && address) {
-    const short = `${address.slice(0, 6)}...${address.slice(-4)}`
-    return (
-      <button
-        type="button"
-        onClick={openAccountModal}
-        className="border px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors hover:opacity-90"
-        style={{ borderColor: "#00FF41", color: "#00FF41" }}
-      >
-        {short}
-      </button>
-    )
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={openConnectModal}
-      className="border px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors hover:opacity-90"
-      style={{ borderColor: "#00FF41", color: "#00FF41" }}
-    >
-      Connect
-    </button>
-  )
-}
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -97,7 +68,10 @@ export function Navbar() {
               </Link>
             )
           )}
-          <ConnectButton />
+          <WalletMultiButton
+            className="!border !px-3 !py-1.5 !text-xs !font-bold !uppercase !tracking-wider !transition-colors hover:!opacity-90 !rounded-none"
+            style={{ borderColor: "#00FF41", color: "#00FF41", backgroundColor: "transparent" }}
+          />
           <div
             className="flex items-center gap-2 border px-3 py-1.5 text-xs"
             style={{ borderColor: "#00FF41", color: "#00FF41" }}
@@ -106,12 +80,15 @@ export function Navbar() {
               className="inline-block h-1.5 w-1.5 rounded-full animate-pulse"
               style={{ backgroundColor: "#00FF41", boxShadow: "0 0 6px #00FF41" }}
             />
-            MAINNET ALPHA
+            GENESIS BOOTSTRAPPING
           </div>
         </nav>
 
         <div className="flex items-center gap-3 md:hidden">
-          <ConnectButton />
+          <WalletMultiButton
+            className="!border !px-3 !py-1.5 !text-xs !font-bold !uppercase !tracking-wider !transition-colors hover:!opacity-90 !rounded-none"
+            style={{ borderColor: "#00FF41", color: "#00FF41", backgroundColor: "transparent" }}
+          />
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label={mobileOpen ? "Close menu" : "Open menu"}

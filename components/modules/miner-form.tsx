@@ -8,6 +8,9 @@ import { Slider } from "@/components/ui/slider"
 export interface MinerFormSubmitPayload {
   pricePerHour: string
   bandwidth: string
+  gpuModel?: string
+  vram?: string
+  gateway?: string
 }
 
 interface MinerFormProps {
@@ -38,7 +41,13 @@ export function MinerForm({ priceRange, gpuTypeLabel = "Same type", canRegister 
     e.preventDefault()
     if (!canSubmit) return
     const priceStr = `$${price.toFixed(2)}/hr`
-    onSubmit?.({ pricePerHour: priceStr, bandwidth: bandwidth.trim() || "1 Gbps" })
+    onSubmit?.({
+      pricePerHour: priceStr,
+      bandwidth: bandwidth.trim() || "1 Gbps",
+      gpuModel: gpuModel.trim() || undefined,
+      vram: vram.trim() || undefined,
+      gateway: gateway.trim() || undefined,
+    })
   }
 
   return (

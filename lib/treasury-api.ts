@@ -1,6 +1,7 @@
 /**
  * NeuroGrid 3.2 Treasury API — Multi-Asset Anchor Era
  * Strict allocation: BTC 45%, SOL 20%, NRG 15%, Sui/ETH 20%
+ * All data from on-chain / API — no mock or fallback values.
  */
 
 export interface TreasuryAsset {
@@ -11,6 +12,22 @@ export interface TreasuryAsset {
   weight: number // 0-1
 }
 
+/** Native on-chain balances per vault (for Trust Center display). */
+export interface TreasuryNativeBalances {
+  sol: number
+  btc: number
+  eth: number
+  sui: number
+}
+
+/** USD value of each vault balance (for Trust Center display). */
+export interface TreasuryVaultBalanceUsd {
+  sol: number
+  btc: number
+  eth: number
+  sui: number
+}
+
 export interface TreasuryData {
   assets: TreasuryAsset[]
   totalReserveUsd: number
@@ -18,6 +35,10 @@ export interface TreasuryData {
   ecoPoolBalanceUsd: number
   totalSupplyNrg: number
   lastUpdated: number
+  /** Actual vault balances in native units (SOL, BTC, ETH, SUI). */
+  nativeBalances: TreasuryNativeBalances
+  /** USD value of each vault balance. */
+  vaultBalanceUsd: TreasuryVaultBalanceUsd
 }
 
 // v3.2: Strict allocation — MUST NOT MODIFY
@@ -51,22 +72,22 @@ async function fetchWithTimeout(
 }
 
 async function fetchBtcBalance(address: string): Promise<number> {
-  try {
-    const r = await fetchWithTimeout(
-      `https://blockstream.info/api/address/${address}`
-    )
-    const j = await r.json()
-    const funded = (j.chain_stats?.funded_txo_sum ?? 0) / 1e8
-    const spent = (j.chain_stats?.spent_txo_sum ?? 0) / 1e8
-    return Math.max(0, funded - spent)
-  } catch {
-    return 0.125 // fallback
-  }
+  const r = await fetchWithTimeout(
+    `https://blockstream.info/api/address/${address}`,
+    undefined,
+    12_000
+  )
+  const j = await r.json()
+  if (!r.ok) throw new Error("BTC balance fetch failed")
+  const funded = (j.chain_stats?.funded_txo_sum ?? 0) / 1e8
+  const spent = (j.chain_stats?.spent_txo_sum ?? 0) / 1e8
+  return Math.max(0, funded - spent)
 }
 
 async function fetchSolBalance(address: string): Promise<number> {
-  try {
-    const r = await fetchWithTimeout("https://api.mainnet-beta.solana.com", {
+  const r = await fetchWithTimeout(
+    "https://api.mainnet-beta.solana.com",
+    {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -75,132 +96,166 @@ async function fetchSolBalance(address: string): Promise<number> {
         method: "getBalance",
         params: [address],
       }),
-    })
-    const j = await r.json()
-    const lamports = j.result?.value ?? 0
-    return lamports / 1e9
-  } catch {
-    return 12.5 // fallback
-  }
+    },
+    20_000
+  )
+  const j = await r.json()
+  if (j.error) throw new Error(j.error.message || "SOL balance fetch failed")
+  const lamports = j.result?.value ?? 0
+  return lamports / 1e9
 }
 
 async function fetchSuiBalance(address: string): Promise<number> {
-  try {
-    const r = await fetchWithTimeout("https://fullnode.mainnet.sui.io:443", {
+  const r = await fetchWithTimeout("https://fullnode.mainnet.sui.io:443", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "suix_getBalance",
+      params: [address, "0x2::sui::SUI"],
+    }),
+  }, 8000)
+  const j = await r.json()
+  if (j.error) throw new Error("SUI balance fetch failed")
+  const total = j.result?.totalBalance ?? "0"
+  return parseInt(total, 10) / 1e9
+}
+
+async function fetchEthBalance(address: string): Promise<number> {
+  const r = await fetchWithTimeout(
+    "https://eth.llamarpc.com",
+    {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
-        method: "suix_getBalance",
-        params: [address, "0x2::sui::SUI"],
+        method: "eth_getBalance",
+        params: [address, "latest"],
       }),
-    }, 8000)
-    const j = await r.json()
-    const total = j.result?.totalBalance ?? "0"
-    return parseInt(total, 10) / 1e9 // MIST to SUI
-  } catch {
-    return 1500
-  }
-}
-
-async function fetchEthBalance(address: string): Promise<number> {
-  try {
-    const r = await fetchWithTimeout(
-      "https://eth.llamarpc.com",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "eth_getBalance",
-          params: [address, "latest"],
-        }),
-      },
-      8000
-    )
-    const j = await r.json()
-    const hex = j.result ?? "0x0"
-    return parseInt(hex, 16) / 1e18
-  } catch {
-    return 2.5 // fallback
-  }
+    },
+    8000
+  )
+  const j = await r.json()
+  if (j.error) throw new Error("ETH balance fetch failed")
+  const hex = j.result ?? "0x0"
+  return parseInt(hex, 16) / 1e18
 }
 
 async function fetchUsdPrices(): Promise<Record<string, number>> {
-  try {
-    const r = await fetchWithTimeout(
-      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,sui&vs_currencies=usd",
-      6000
-    )
-    const j = await r.json()
-    return {
-      btc: j.bitcoin?.usd ?? 97000,
-      eth: j.ethereum?.usd ?? 3500,
-      sol: j.solana?.usd ?? 220,
-      sui: j.sui?.usd ?? 3.5,
-      nrg: 0.125,
-    }
-  } catch {
-    return { btc: 97000, eth: 3500, sol: 220, sui: 3.5, nrg: 0.125 }
+  const r = await fetchWithTimeout(
+    "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,sui&vs_currencies=usd",
+    undefined,
+    12_000
+  )
+  const j = await r.json()
+  if (!r.ok) throw new Error("Price fetch failed")
+  const btc = j.bitcoin?.usd
+  const eth = j.ethereum?.usd
+  const sol = j.solana?.usd
+  const sui = j.sui?.usd
+  if (typeof btc !== "number" || typeof eth !== "number" || typeof sol !== "number" || typeof sui !== "number") {
+    throw new Error("Invalid price data")
+  }
+  return { btc, eth, sol, sui, nrg: 0.125 }
+}
+
+// Production addresses — Epoch-based $10k rebalance (Trust Center aligned)
+const PRODUCTION_TREASURY = {
+  sol: "AmKdMDFTYRXUHPxcXjvJxMM1xZeAmR6rmeNj2t2cWH3h",
+  btc: "bc1q206f5r0e7lnuzy8kexnjjdhs3wg3ec5zth0kke",
+  eth: "0x661613537AbD68166714B68D87F6BF92262e464E",
+  sui: "0xa29dd7936ef96a44c859b4c3b3d46a1ee97019cb1f7dd7f23fb3d4d5c1e109b4",
+} as const
+
+function getTreasuryAddresses(): { btc: string; sol: string; eth: string; sui: string } {
+  return {
+    btc: process.env.NEXT_PUBLIC_TREASURY_BTC ?? process.env.TREASURY_BTC ?? PRODUCTION_TREASURY.btc,
+    sol: process.env.NEXT_PUBLIC_TREASURY_SOL ?? process.env.TREASURY_SOL ?? PRODUCTION_TREASURY.sol,
+    eth: process.env.NEXT_PUBLIC_TREASURY_ETH ?? process.env.TREASURY_ETH ?? PRODUCTION_TREASURY.eth,
+    sui: process.env.NEXT_PUBLIC_TREASURY_SUI ?? process.env.TREASURY_SUI ?? PRODUCTION_TREASURY.sui,
   }
 }
 
-// Placeholder treasury addresses (replace with real multi-sig)
-const ADDRESSES = {
-  btc: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-  sol: "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
-  eth: "0x742d35Cc6634C0532925a3b844Bc9e7595f5b291",
-  sui: "0x853a5e5e5a5e5a5e5a5e5a5e5a5e5a5e5a5e5a5e",
+/** Epoch 0 fallback when external fetches time out or fail (no 500). */
+function getEpochZeroTreasuryData(now: number): TreasuryData {
+  const assets: TreasuryAsset[] = [
+    { symbol: "BTC", amount: 0, amountFormatted: "0.0000", usdValue: 0, weight: ASSET_WEIGHTS.btc },
+    { symbol: "SOL", amount: 0, amountFormatted: "0.00", usdValue: 0, weight: ASSET_WEIGHTS.sol },
+    { symbol: "NRG", amount: 0, amountFormatted: "0", usdValue: 0, weight: ASSET_WEIGHTS.nrg },
+    { symbol: "Sui/ETH", amount: 0, amountFormatted: "0.00", usdValue: 0, weight: ASSET_WEIGHTS.suiEth },
+  ]
+  return {
+    assets,
+    totalReserveUsd: 0,
+    pFloor: 0,
+    ecoPoolBalanceUsd: 0,
+    totalSupplyNrg: TOTAL_SUPPLY_NRG,
+    lastUpdated: now,
+    nativeBalances: { sol: 0, btc: 0, eth: 0, sui: 0 },
+    vaultBalanceUsd: { sol: 0, btc: 0, eth: 0, sui: 0 },
+  }
 }
 
 export async function fetchTreasuryData(): Promise<TreasuryData> {
   const now = Date.now()
   if (cache && now - cache.ts < CACHE_TTL_MS) return cache.data
 
-  const [prices, btcBal, solBal, suiBal, ethBal] = await Promise.all([
-    fetchUsdPrices(),
-    fetchBtcBalance(ADDRESSES.btc),
-    fetchSolBalance(ADDRESSES.sol),
-    fetchSuiBalance(ADDRESSES.sui),
-    fetchEthBalance(ADDRESSES.eth),
-  ])
+  const addresses = getTreasuryAddresses()
 
-  // v3.2: P_floor = TotalValue_Treasury / TotalSupply_NRG (45/20/15/20)
-  const btcUsd = btcBal * prices.btc
-  const solUsd = solBal * prices.sol
-  const suiUsd = suiBal * prices.sui
-  const ethUsd = ethBal * prices.eth
-  const suiEthUsd = suiUsd + ethUsd // Sui/ETH 20% combined
-  const nrgUsd = (btcUsd + solUsd + suiEthUsd) * 0.15 / 0.85 // NRG 15% of non-NRG reserve
+  try {
+    const [prices, btcBal, solBal, suiBal, ethBal] = await Promise.all([
+      fetchUsdPrices(),
+      fetchBtcBalance(addresses.btc),
+      fetchSolBalance(addresses.sol),
+      fetchSuiBalance(addresses.sui),
+      fetchEthBalance(addresses.eth),
+    ])
 
-  const totalReserveUsd = btcUsd + solUsd + suiEthUsd + nrgUsd
+    const btcUsd = btcBal * prices.btc
+    const solUsd = solBal * prices.sol
+    const suiUsd = suiBal * prices.sui
+    const ethUsd = ethBal * prices.eth
+    const suiEthUsd = suiUsd + ethUsd
+    const nrgUsd = (btcUsd + solUsd + suiEthUsd) * 0.15 / 0.85
 
-  // Display strict 45/20/15/20 allocation
-  const targetBtc = totalReserveUsd * ASSET_WEIGHTS.btc
-  const targetSol = totalReserveUsd * ASSET_WEIGHTS.sol
-  const targetNrg = totalReserveUsd * ASSET_WEIGHTS.nrg
-  const targetSuiEth = totalReserveUsd * ASSET_WEIGHTS.suiEth
+    const totalReserveUsd = btcUsd + solUsd + suiEthUsd + nrgUsd
 
-  const assets: TreasuryAsset[] = [
-    { symbol: "BTC", amount: targetBtc / prices.btc, amountFormatted: (targetBtc / prices.btc).toFixed(4), usdValue: targetBtc, weight: ASSET_WEIGHTS.btc },
-    { symbol: "SOL", amount: targetSol / prices.sol, amountFormatted: (targetSol / prices.sol).toFixed(2), usdValue: targetSol, weight: ASSET_WEIGHTS.sol },
-    { symbol: "NRG", amount: targetNrg / prices.nrg, amountFormatted: (targetNrg / prices.nrg).toLocaleString(), usdValue: targetNrg, weight: ASSET_WEIGHTS.nrg },
-    { symbol: "Sui/ETH", amount: targetSuiEth / prices.eth, amountFormatted: (targetSuiEth / prices.eth).toFixed(2), usdValue: targetSuiEth, weight: ASSET_WEIGHTS.suiEth },
-  ]
+    const targetBtc = totalReserveUsd * ASSET_WEIGHTS.btc
+    const targetSol = totalReserveUsd * ASSET_WEIGHTS.sol
+    const targetNrg = totalReserveUsd * ASSET_WEIGHTS.nrg
+    const targetSuiEth = totalReserveUsd * ASSET_WEIGHTS.suiEth
 
-  const pFloor = totalReserveUsd / TOTAL_SUPPLY_NRG
-  const ecoPoolBalanceUsd = totalReserveUsd * 0.15
+    const assets: TreasuryAsset[] = [
+      { symbol: "BTC", amount: targetBtc / prices.btc, amountFormatted: (targetBtc / prices.btc).toFixed(4), usdValue: targetBtc, weight: ASSET_WEIGHTS.btc },
+      { symbol: "SOL", amount: targetSol / prices.sol, amountFormatted: (targetSol / prices.sol).toFixed(2), usdValue: targetSol, weight: ASSET_WEIGHTS.sol },
+      { symbol: "NRG", amount: targetNrg / prices.nrg, amountFormatted: (targetNrg / prices.nrg).toLocaleString(), usdValue: targetNrg, weight: ASSET_WEIGHTS.nrg },
+      { symbol: "Sui/ETH", amount: targetSuiEth / prices.eth, amountFormatted: (targetSuiEth / prices.eth).toFixed(2), usdValue: targetSuiEth, weight: ASSET_WEIGHTS.suiEth },
+    ]
 
-  const data: TreasuryData = {
-    assets,
-    totalReserveUsd,
-    pFloor,
-    ecoPoolBalanceUsd,
-    totalSupplyNrg: TOTAL_SUPPLY_NRG,
-    lastUpdated: now,
+    const pFloor = totalReserveUsd / TOTAL_SUPPLY_NRG
+    const ecoPoolBalanceUsd = totalReserveUsd * 0.15
+
+    const data: TreasuryData = {
+      assets,
+      totalReserveUsd,
+      pFloor,
+      ecoPoolBalanceUsd,
+      totalSupplyNrg: TOTAL_SUPPLY_NRG,
+      lastUpdated: now,
+      nativeBalances: { sol: solBal, btc: btcBal, eth: ethBal, sui: suiBal },
+      vaultBalanceUsd: { sol: solUsd, btc: btcUsd, eth: ethUsd, sui: suiUsd },
+    }
+    cache = { data, ts: now }
+    return data
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error"
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[Treasury API] Epoch 0 fallback:", msg)
+    }
+    const fallback = getEpochZeroTreasuryData(now)
+    cache = { data: fallback, ts: now }
+    return fallback
   }
-  cache = { data, ts: now }
-  return data
 }

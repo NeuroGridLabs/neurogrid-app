@@ -55,6 +55,20 @@ export const NODE_GPU_MAP: Record<string, string> = {
   "kappa-04": "1x A100",
 }
 
+/** Node id -> VRAM for fallback node list (when no backend) */
+export const NODE_VRAM_MAP: Record<string, string> = {
+  "alpha-01": "24GB",
+  "beta-07": "24GB",
+  "gamma-12": "320GB",
+  "delta-03": "160GB",
+  "epsilon-09": "24GB",
+  "zeta-15": "160GB",
+  "eta-22": "320GB",
+  "theta-08": "24GB",
+  "iota-11": "48GB",
+  "kappa-04": "80GB",
+}
+
 function loadNodeToMiner(): Record<string, string> {
   if (typeof window === "undefined") return {}
   try {
@@ -153,6 +167,12 @@ interface MinerRegistryContextValue {
     walletAddress: string,
     options?: { pricePerHour?: string; bandwidth?: string }
   ) => string | null
+  /** Register a specific nodeId (e.g. from backend); returns nodeId if slot was free */
+  registerMinerWithNodeId: (
+    nodeId: string,
+    walletAddress: string,
+    options?: { pricePerHour?: string; bandwidth?: string }
+  ) => string | null
   /** Called by nodes page when deploy/undeploy completes to keep rentals in sync */
   setNodeRental: (nodeId: string, renterAddress: string | null) => void
   /** Get node ids registered by this wallet */
@@ -172,8 +192,13 @@ function parsePriceToNumber(priceStr: string): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+function getInitialNodeToMiner(): Record<string, string> {
+  if (typeof window === "undefined") return {}
+  return loadNodeToMiner()
+}
+
 export function MinerRegistryProvider({ children }: { children: ReactNode }) {
-  const [nodeToMiner, setNodeToMiner] = useState<Record<string, string>>({})
+  const [nodeToMiner, setNodeToMiner] = useState<Record<string, string>>(getInitialNodeToMiner)
   const [nodeRentals, setNodeRentals] = useState<Record<string, string | null>>(() => loadNodeRentals())
   const [nodePrices, setNodePrices] = useState<Record<string, string>>(() => loadNodePrices())
   const [nodeBandwidth, setNodeBandwidth] = useState<Record<string, string>>(() => loadNodeBandwidth())
@@ -217,6 +242,33 @@ export function MinerRegistryProvider({ children }: { children: ReactNode }) {
         return nextB
       })
       return available
+    },
+    [persistNodeToMiner]
+  )
+
+  const registerMinerWithNodeId = useCallback(
+    (
+      nodeId: string,
+      walletAddress: string,
+      options?: { pricePerHour?: string; bandwidth?: string }
+    ): string | null => {
+      const current = loadNodeToMiner()
+      if (current[nodeId]) return null
+      const next = { ...current, [nodeId]: walletAddress }
+      persistNodeToMiner(next)
+      const price = options?.pricePerHour ?? "$0.59/hr"
+      const bandwidth = options?.bandwidth ?? "1 Gbps"
+      setNodePrices((prev) => {
+        const nextP = { ...prev, [nodeId]: price }
+        saveNodePrices(nextP)
+        return nextP
+      })
+      setNodeBandwidth((prev) => {
+        const nextB = { ...prev, [nodeId]: bandwidth }
+        saveNodeBandwidth(nextB)
+        return nextB
+      })
+      return nodeId
     },
     [persistNodeToMiner]
   )
@@ -266,6 +318,7 @@ export function MinerRegistryProvider({ children }: { children: ReactNode }) {
         nodePrices,
         nodeBandwidth,
         registerMiner,
+        registerMinerWithNodeId,
         setNodeRental,
         getMinerNodes,
         getAvailableNodeId,

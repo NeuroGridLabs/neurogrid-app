@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { StatCard } from "@/components/atoms/stat-card"
 import { NeonButton } from "@/components/atoms/neon-button"
 import { useTreasuryData } from "@/components/modules/treasury-api"
@@ -78,44 +78,19 @@ function AssetDonutChart() {
 
 export function ProtocolStats() {
   const { data: treasury, loading } = useTreasuryData()
-  const [pFloorDisplay, setPFloorDisplay] = useState(0.1247)
-  const [totalRepurchased, setTotalRepurchased] = useState(47_291)
-  const [activeGpus, setActiveGpus] = useState(7)
-
-  useEffect(() => {
-    if (treasury) {
-      setPFloorDisplay(treasury.pFloor)
-    }
-  }, [treasury?.pFloor])
-
-  // Micro jitter for breathing effect
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPFloorDisplay((p) => {
-        const base = treasury?.pFloor ?? p
-        const jitter = 0.00001 * (Math.random() - 0.5)
-        return Math.max(0.08, Math.min(0.25, base + jitter))
-      })
-    }, 1500)
-    return () => clearInterval(interval)
-  }, [treasury?.pFloor])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTotalRepurchased((prev) => prev + Math.floor(Math.random() * 3))
-      setActiveGpus(5 + Math.floor(Math.random() * 5))
-    }, 4000)
-    return () => clearInterval(interval)
-  }, [])
-
-  const ecoPoolUsd = treasury?.ecoPoolBalanceUsd ?? 18_750
+  // Epoch 0 (Genesis): real or placeholder values, no mock jitter
+  const pFloorDisplay = treasury?.pFloor ?? 0
+  const epochProgressUsd = treasury?.totalReserveUsd ?? 0
+  const totalRepurchased = 0 // $NRG locked from 5% fee
+  const activeGpus = 2
+  const genesisNodes = 1
 
   return (
     <section className="px-4 py-10">
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: "#00FF41" }}>
-            Protocol Stats (v3.2)
+            Protocol Stats (v3.4 Genesis)
           </h2>
           <a href="https://pump.fun" target="_blank" rel="noopener noreferrer">
             <NeonButton variant="primary" accentColor="#00FF41">
@@ -127,31 +102,31 @@ export function ProtocolStats() {
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <StatCard
             label="NRG Floor Price"
-            value={loading ? "—" : `$${pFloorDisplay.toFixed(4)}`}
+            value={loading ? "—" : pFloorDisplay > 0 ? `$${pFloorDisplay.toFixed(4)}` : "$0.0000"}
             sub="P_floor = TotalValue_Treasury / TotalSupply_NRG"
             icon={<PieChart className="h-4 w-4" />}
             accentColor="#00FF41"
-            pulse
+            pulse={pFloorDisplay > 0}
           />
           <StatCard
-            label="Eco-Pool Buffer"
-            value={loading ? "—" : `$${(ecoPoolUsd / 1000).toFixed(1)}k`}
-            sub="2.5% flexible liquidity reserve · Liquidity trap defense"
+            label="Epoch 1 Progress"
+            value={loading ? "—" : `$${Math.round(epochProgressUsd).toLocaleString()} / $10,000`}
+            sub="Target threshold for first hard-asset rebalance."
             icon={<Droplets className="h-4 w-4" />}
             accentColor="#00FF41"
           />
           <StatCard
             label="Total Repurchased"
             value={totalRepurchased.toLocaleString()}
-            sub="$NRG buyback from 5% fee"
+            sub="$NRG locked from 5% protocol fee."
             icon={<Flame className="h-4 w-4" />}
             accentColor="#00FF41"
-            pulse
+            pulse={totalRepurchased > 0}
           />
           <StatCard
             label="Active GPUs"
             value={`${activeGpus}`}
-            sub="Across 3 nodes"
+            sub={`Across ${genesisNodes} Genesis Node${genesisNodes !== 1 ? "s" : ""}`}
             icon={<Cpu className="h-4 w-4" />}
             accentColor="#00FFFF"
           />
@@ -164,7 +139,7 @@ export function ProtocolStats() {
           />
         </div>
 
-        {/* Multi-Asset Backing: 45/20/15/20 */}
+        {/* Target Asset Allocation: 45/20/15/20 — Epoch 0 narrative */}
         <div
           className="mt-4 flex flex-col items-center gap-4 border border-border p-4 md:flex-row md:items-center md:justify-between"
           style={{ backgroundColor: "var(--terminal-bg)" }}
@@ -173,7 +148,7 @@ export function ProtocolStats() {
             <AssetDonutChart />
             <div className="flex flex-col gap-1">
               <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "#00FF41" }}>
-                Hard Asset Backing (v3.2)
+                Target Asset Allocation (v3.4)
               </span>
               <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs" style={{ color: "rgba(0,255,65,0.6)" }}>
                 <span>BTC 45%</span>
@@ -181,7 +156,10 @@ export function ProtocolStats() {
                 <span>NRG 15%</span>
                 <span>Sui/ETH 20%</span>
               </div>
-              {treasury && (
+              <p className="mt-1.5 max-w-md text-xs leading-snug" style={{ color: "rgba(0,255,65,0.5)" }}>
+                Current State: Epoch 0 (100% NRG Buyback). Chart reflects Target Ratio upon reaching $10k TVL.
+              </p>
+              {treasury && treasury.totalReserveUsd > 0 && (
                 <div className="mt-1 text-xs" style={{ color: "rgba(0,255,65,0.4)" }}>
                   Reserve: ${(treasury.totalReserveUsd / 1000).toFixed(1)}k USD
                 </div>

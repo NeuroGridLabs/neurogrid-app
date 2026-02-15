@@ -67,15 +67,15 @@ export function MyRegisteredMiners() {
                   <span
                     className="inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-xs"
                     style={{
-                      backgroundColor: renter ? "rgba(0,255,65,0.1)" : "rgba(0,255,255,0.08)",
-                      color: renter ? "#00FF41" : "rgba(0,255,255,0.8)",
-                      borderColor: renter ? "rgba(0,255,65,0.35)" : "rgba(0,255,255,0.25)",
+                      backgroundColor: renter ? "rgba(0,255,65,0.1)" : "rgba(255,200,0,0.1)",
+                      color: renter ? "#00FF41" : "#ffc800",
+                      borderColor: renter ? "rgba(0,255,65,0.35)" : "rgba(255,200,0,0.35)",
                     }}
                   >
                     {renter ? (
                       <>Rented by {renter.slice(0, 6)}…{renter.slice(-4)}</>
                     ) : (
-                      "Available"
+                      "Pending FRP"
                     )}
                   </span>
                 </div>

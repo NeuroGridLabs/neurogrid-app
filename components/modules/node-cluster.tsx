@@ -1,9 +1,21 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import { useConnection, useWallet } from "@solana/wallet-adapter-react"
+import {
+  PublicKey,
+  Transaction,
+  TransactionExpiredBlockheightExceededError,
+} from "@solana/web3.js"
+import {
+  getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountInstruction,
+  createTransferInstruction,
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+} from "@solana/spl-token"
 import { StatusBadge, type BadgeStatus } from "@/components/atoms/status-badge"
 import { GpuBar } from "@/components/atoms/gpu-bar"
-import { useMinerRegistry } from "@/lib/miner-registry-context"
 import {
   Dialog,
   DialogContent,
@@ -12,11 +24,24 @@ import {
 } from "@/components/ui/dialog"
 import { Loader2, Rocket, Circle, X, ArrowRight, TrendingUp, CheckCircle2, Lock } from "lucide-react"
 import { motion } from "framer-motion"
+import { toast } from "sonner"
+import {
+  TREASURY_WALLET_ADDRESS,
+  USDT_MINT_ADDRESS,
+  USDT_DECIMALS,
+} from "@/lib/solana-constants"
+import type { Node } from "@/lib/types/node"
+import {
+  useMinerRegistry,
+  NODE_DISPLAY_NAMES,
+  NODE_GPU_MAP,
+  NODE_VRAM_MAP,
+} from "@/lib/miner-registry-context"
 
 const DEPLOY_DURATION_MS = 2500
 const UNDEPLOY_DURATION_MS = 1800
 const ALLOCATE_MS = 600
-const SYNC_MS = DEPLOY_DURATION_MS - ALLOCATE_MS
+const NODES_FETCH_INTERVAL_MS = 30_000
 
 type ActionModalType = "deploy" | "undeploy"
 type ModalPhase = "confirm" | "in_progress" | "done"
@@ -40,49 +65,50 @@ interface NodeClusterProps {
   openConnectModal?: () => void
   onDeployComplete?: (node: RentedNodeSnapshot) => void
   onUndeployComplete?: (nodeId: string) => void
-  /** When set, open undeploy confirm modal for this node (e.g. from My Rented Nodes panel) */
   triggerUndeployNodeId?: string | null
-  /** Called when undeploy modal is opened from trigger (parent should clear trigger) */
   onUndeployModalOpen?: () => void
 }
 
-interface Node {
-  id: string
-  name: string
-  gpus: string
-  vram: string
-  status: BadgeStatus
-  utilization: number
-  bandwidth: string
-  latencyMs: number
-  isGenesis?: boolean
-  /** Wallet address that rented this node; null = available */
-  rentedBy: string | null
-  gateway?: string
-  port?: number
-  /** Miner-set rental price per hour (e.g. "$0.59/hr") */
-  pricePerHour: string
+async function fetchNodes(): Promise<Node[]> {
+  const res = await fetch("/api/nodes", { cache: "no-store" })
+  if (!res.ok) return []
+  const data = (await res.json()) as { nodes?: Node[] }
+  return Array.isArray(data.nodes) ? data.nodes : []
 }
 
-function mockGateway(nodeId: string): string {
-  return `${nodeId.replace(/-/g, "")}.ngrid.xyz`
-}
-function mockPort(nodeId: string): number {
-  return nodeId.charCodeAt(nodeId.length - 1) % 2 === 0 ? 443 : 7890
+/** USDT raw amount (6 decimals). No careless rounding. */
+function usdtToRaw(humanAmount: number): bigint {
+  const scaled = humanAmount * 10 ** USDT_DECIMALS
+  return BigInt(Math.floor(scaled))
 }
 
-const INITIAL_NODES: Node[] = [
-  { id: "alpha-01", name: "Alpha-01", gpus: "1x RTX4090", vram: "24GB", status: "ACTIVE", utilization: 87, bandwidth: "1 Gbps", latencyMs: 12, isGenesis: true, rentedBy: null, pricePerHour: "$0.59/hr" },
-  { id: "beta-07", name: "Beta-07", gpus: "1x RTX4090", vram: "24GB", status: "ACTIVE", utilization: 62, bandwidth: "500 Mbps", latencyMs: 28, isGenesis: false, rentedBy: null, pricePerHour: "$0.62/hr" },
-  { id: "gamma-12", name: "Gamma-12", gpus: "4x A100", vram: "320GB", status: "SYNCING", utilization: 34, bandwidth: "2 Gbps", latencyMs: 45, isGenesis: false, rentedBy: null, pricePerHour: "$2.40/hr" },
-  { id: "delta-03", name: "Delta-03", gpus: "2x H100", vram: "160GB", status: "ACTIVE", utilization: 71, bandwidth: "1 Gbps", latencyMs: 18, isGenesis: false, rentedBy: null, pricePerHour: "$1.85/hr" },
-  { id: "epsilon-09", name: "Epsilon-09", gpus: "1x RTX4090", vram: "24GB", status: "ACTIVE", utilization: 45, bandwidth: "500 Mbps", latencyMs: 52, isGenesis: false, rentedBy: null, pricePerHour: "$0.55/hr" },
-  { id: "zeta-15", name: "Zeta-15", gpus: "2x A100", vram: "160GB", status: "ACTIVE", utilization: 78, bandwidth: "1 Gbps", latencyMs: 33, isGenesis: false, rentedBy: null, pricePerHour: "$1.20/hr" },
-  { id: "eta-22", name: "Eta-22", gpus: "4x H100", vram: "320GB", status: "SYNCING", utilization: 12, bandwidth: "2 Gbps", latencyMs: 67, isGenesis: false, rentedBy: null, pricePerHour: "$3.10/hr" },
-  { id: "theta-08", name: "Theta-08", gpus: "1x RTX4090", vram: "24GB", status: "ACTIVE", utilization: 91, bandwidth: "1 Gbps", latencyMs: 15, isGenesis: false, rentedBy: null, pricePerHour: "$0.65/hr" },
-  { id: "iota-11", name: "Iota-11", gpus: "2x RTX4090", vram: "48GB", status: "ACTIVE", utilization: 56, bandwidth: "1 Gbps", latencyMs: 41, isGenesis: false, rentedBy: null, pricePerHour: "$1.05/hr" },
-  { id: "kappa-04", name: "Kappa-04", gpus: "1x A100", vram: "80GB", status: "ACTIVE", utilization: 68, bandwidth: "500 Mbps", latencyMs: 38, isGenesis: false, rentedBy: null, pricePerHour: "$0.89/hr" },
-]
+/** Build Node[] from miner registry when /api/nodes returns empty (no backend linked). */
+function buildNodesFromRegistry(
+  nodeToMiner: Record<string, string>,
+  nodeRentals: Record<string, string | null>,
+  nodePrices: Record<string, string>,
+  nodeBandwidth: Record<string, string>,
+): Node[] {
+  return Object.keys(nodeToMiner).map((id): Node => {
+    const priceStr = nodePrices[id] ?? "$0.59/hr"
+    const match = priceStr.match(/\$?([\d.]+)/)
+    const priceInUSDT = match ? parseFloat(match[1]) : 0.59
+    return {
+      id,
+      name: NODE_DISPLAY_NAMES[id] ?? id,
+      gpus: NODE_GPU_MAP[id] ?? "—",
+      vram: NODE_VRAM_MAP[id] ?? "24GB",
+      status: "PENDING",
+      utilization: 0,
+      bandwidth: nodeBandwidth[id] ?? "1 Gbps",
+      latencyMs: 0,
+      rentedBy: nodeRentals[id] ?? null,
+      minerWalletAddress: nodeToMiner[id],
+      priceInUSDT: Number.isFinite(priceInUSDT) ? priceInUSDT : 0.59,
+      pricePerHour: priceStr,
+    }
+  })
+}
 
 export function NodeCluster({
   isConnected = false,
@@ -93,8 +119,15 @@ export function NodeCluster({
   triggerUndeployNodeId = null,
   onUndeployModalOpen,
 }: NodeClusterProps) {
-  const { nodeToMiner, nodeRentals, nodePrices, setNodeRental } = useMinerRegistry()
+  const {
+    setNodeRental,
+    nodeToMiner,
+    nodeRentals,
+    nodePrices,
+    nodeBandwidth,
+  } = useMinerRegistry()
   const [nodes, setNodes] = useState<Node[]>([])
+  const [nodesLoading, setNodesLoading] = useState(true)
   const [hoverUndeployId, setHoverUndeployId] = useState<string | null>(null)
   const [actionModal, setActionModal] = useState<{
     type: ActionModalType
@@ -103,42 +136,54 @@ export function NodeCluster({
   const [modalPhase, setModalPhase] = useState<ModalPhase>("confirm")
   const [progressStep, setProgressStep] = useState<ProgressStep | null>(null)
   const [lastTriggerUndeployId, setLastTriggerUndeployId] = useState<string | null>(null)
+  const [deployTxPending, setDeployTxPending] = useState(false)
 
-  const registeredNodeIds = Object.keys(nodeToMiner)
+  const { connection } = useConnection()
+  const { publicKey, sendTransaction } = useWallet()
+
+  const usdtMint = USDT_MINT_ADDRESS
+  const treasuryPubkey = TREASURY_WALLET_ADDRESS
 
   useEffect(() => {
-    if (registeredNodeIds.length === 0) {
-      setNodes([])
-      return
+    let cancelled = false
+    async function load() {
+      setNodesLoading(true)
+      try {
+        const list = await fetchNodes()
+        if (!cancelled) {
+          if (list.length > 0) {
+            setNodes(list)
+          } else {
+            const fromRegistry = buildNodesFromRegistry(
+              nodeToMiner,
+              nodeRentals,
+              nodePrices,
+              nodeBandwidth,
+            )
+            setNodes(fromRegistry)
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          const fromRegistry = buildNodesFromRegistry(
+            nodeToMiner,
+            nodeRentals,
+            nodePrices,
+            nodeBandwidth,
+          )
+          setNodes(fromRegistry)
+        }
+      } finally {
+        if (!cancelled) setNodesLoading(false)
+      }
     }
-    setNodes((prev) =>
-      registeredNodeIds.map((id) => {
-        const template = INITIAL_NODES.find((n) => n.id === id)
-        const rentedBy = nodeRentals[id] ?? null
-        const pricePerHour = nodePrices[id] ?? template?.pricePerHour ?? "$0.59/hr"
-        const existing = prev.find((n) => n.id === id)
-        if (existing)
-          return { ...existing, rentedBy, pricePerHour } as Node
-        if (!template) return null
-        return { ...template, rentedBy, pricePerHour } as Node
-      }).filter((n): n is Node => n !== null)
-    )
-  }, [registeredNodeIds.join(","), nodePrices, nodeRentals])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNodes((prev) =>
-        prev.map((n) => ({
-          ...n,
-          utilization: Math.max(
-            10,
-            Math.min(99, n.utilization + Math.floor(Math.random() * 11) - 5)
-          ),
-        }))
-      )
-    }, 2500)
-    return () => clearInterval(interval)
-  }, [])
+    load()
+    const t = setInterval(load, NODES_FETCH_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(t)
+    }
+  }, [nodeToMiner, nodeRentals, nodePrices, nodeBandwidth])
 
   const closeModal = useCallback(() => {
     setActionModal(null)
@@ -147,7 +192,7 @@ export function NodeCluster({
   }, [])
 
   const runDeploySequence = useCallback(
-    (node: Node) => {
+    (node: Node, gateway: string, port: number) => {
       const nodeId = node.id
       const address = walletAddress ?? ""
       setProgressStep("allocating")
@@ -166,8 +211,6 @@ export function NodeCluster({
       }, ALLOCATE_MS)
       const t2 = setTimeout(() => {
         setProgressStep("ready")
-        const gateway = mockGateway(nodeId)
-        const port = mockPort(nodeId)
         setNodes((prev) =>
           prev.map((n) =>
             n.id === nodeId
@@ -249,11 +292,160 @@ export function NodeCluster({
     onUndeployModalOpen?.()
   }, [triggerUndeployNodeId, lastTriggerUndeployId, nodes, onUndeployModalOpen])
 
-  const onConfirmDeploy = useCallback(() => {
+  const onConfirmDeploy = useCallback(async () => {
     if (!actionModal || actionModal.type !== "deploy") return
-    setModalPhase("in_progress")
-    runDeploySequence(actionModal.node)
-  }, [actionModal, runDeploySequence])
+    const node = actionModal.node
+    if (!publicKey) {
+      toast.error("Wallet not connected")
+      openConnectModal?.()
+      return
+    }
+    const X = node.priceInUSDT
+    if (!Number.isFinite(X) || X <= 0) {
+      toast.error("Invalid node price")
+      return
+    }
+
+    setDeployTxPending(true)
+    const toastId = toast.loading("Processing Web3 Payment...")
+
+    try {
+      // 95/5 split: minerAmount = X * 0.95, treasuryAmount = X * 0.05 (raw = X * 10^6, Math.floor)
+      const totalRaw = usdtToRaw(X)
+      const minerRaw = BigInt(Math.floor(Number(totalRaw) * 0.95))
+      const treasuryRaw = totalRaw - minerRaw
+
+      const payerATA = getAssociatedTokenAddressSync(
+        usdtMint,
+        publicKey,
+        false,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      )
+      const minerATA = getAssociatedTokenAddressSync(
+        usdtMint,
+        new PublicKey(node.minerWalletAddress),
+        false,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      )
+      const treasuryATA = getAssociatedTokenAddressSync(
+        usdtMint,
+        treasuryPubkey,
+        false,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      )
+
+      let balance = BigInt(0)
+      try {
+        const r = await connection.getTokenAccountBalance(payerATA)
+        balance = BigInt(r.value.amount)
+      } catch {
+        toast.error("No USDT token account. Please add USDT to your wallet first.")
+        toast.dismiss(toastId)
+        setDeployTxPending(false)
+        return
+      }
+      if (balance < totalRaw) {
+        toast.error("Insufficient USDT balance")
+        toast.dismiss(toastId)
+        setDeployTxPending(false)
+        return
+      }
+
+      const tx = new Transaction()
+
+      const minerAccountInfo = await connection.getAccountInfo(minerATA)
+      if (!minerAccountInfo) {
+        tx.add(
+          createAssociatedTokenAccountInstruction(
+            publicKey,
+            minerATA,
+            new PublicKey(node.minerWalletAddress),
+            usdtMint,
+            TOKEN_PROGRAM_ID,
+            ASSOCIATED_TOKEN_PROGRAM_ID
+          )
+        )
+      }
+      const treasuryAccountInfo = await connection.getAccountInfo(treasuryATA)
+      if (!treasuryAccountInfo) {
+        tx.add(
+          createAssociatedTokenAccountInstruction(
+            publicKey,
+            treasuryATA,
+            treasuryPubkey,
+            usdtMint,
+            TOKEN_PROGRAM_ID,
+            ASSOCIATED_TOKEN_PROGRAM_ID
+          )
+        )
+      }
+
+      tx.add(
+        createTransferInstruction(
+          payerATA,
+          minerATA,
+          publicKey,
+          minerRaw,
+          [],
+          TOKEN_PROGRAM_ID
+        ),
+        createTransferInstruction(
+          payerATA,
+          treasuryATA,
+          publicKey,
+          treasuryRaw,
+          [],
+          TOKEN_PROGRAM_ID
+        )
+      )
+
+      const sig = await sendTransaction(tx, connection, { skipPreflight: false })
+      await connection.confirmTransaction(sig, "confirmed")
+
+      const assignRes = await fetch("/api/deploy/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nodeId: node.id,
+          renterWalletAddress: publicKey.toBase58(),
+          transactionSignature: sig,
+        }),
+      })
+      if (!assignRes.ok) {
+        const errBody = await assignRes.text()
+        throw new Error(errBody || "Assign failed")
+      }
+      const { gateway, port } = (await assignRes.json()) as { gateway: string; port: number }
+
+      setModalPhase("in_progress")
+      runDeploySequence(node, gateway, port)
+      toast.success("Deployment Successful! 5% fee routed to NeuroGrid Treasury.")
+    } catch (e: unknown) {
+      if (e instanceof TransactionExpiredBlockheightExceededError) {
+        toast.error("Transaction expired. Please try again.")
+      } else {
+        const msg =
+          e instanceof Error ? e.message : "Payment failed"
+        toast.error(msg)
+      }
+      // Do not reveal connection details or move node to My Rented Nodes on failure
+    } finally {
+      toast.dismiss(toastId)
+      setDeployTxPending(false)
+    }
+  }, [
+    actionModal,
+    publicKey,
+    sendTransaction,
+    connection,
+    openConnectModal,
+    runDeploySequence,
+    treasuryPubkey,
+    usdtMint,
+  ])
 
   const onConfirmUndeploy = useCallback(() => {
     if (!actionModal || actionModal.type !== "undeploy") return
@@ -314,7 +506,7 @@ export function NodeCluster({
           Node Command Center
         </span>
         <span className="text-xs" style={{ color: "rgba(0,255,65,0.4)" }}>
-          {activeCount}/{nodes.length} running
+          {nodesLoading ? "Loading…" : `${activeCount}/${nodes.length} running`}
         </span>
       </div>
 
@@ -322,13 +514,21 @@ export function NodeCluster({
         className="overflow-y-auto overflow-x-hidden"
         style={{ height: "400px" }}
       >
-        {nodes.length === 0 ? (
+        {nodesLoading ? (
+          <div
+            className="flex flex-col items-center justify-center gap-2 px-4 py-12"
+            style={{ color: "rgba(0,255,65,0.5)" }}
+          >
+            <Loader2 className="h-8 w-8 animate-spin" />
+            <p className="text-xs">Loading nodes…</p>
+          </div>
+        ) : nodes.length === 0 ? (
           <div
             className="flex flex-col items-center justify-center gap-2 px-4 py-12 text-center"
             style={{ color: "rgba(0,255,65,0.5)" }}
           >
             <p className="text-xs">
-              No nodes on sale. Miners register GPUs via Miner Portal → Node Onboarding; registered nodes appear here for rent.
+              No nodes on sale. Miners register GPUs via Miner Portal → Node Onboarding; registered nodes appear here when the backend lists them.
             </p>
           </div>
         ) : (
@@ -342,7 +542,6 @@ export function NodeCluster({
               className="grid grid-cols-[1fr_auto] grid-rows-[auto_auto_auto] items-start gap-x-4 gap-y-1 px-4 py-3"
               style={{ minHeight: "72px" }}
             >
-              {/* Line 1: Name, GENESIS badge, StatusBadge, miner rental price */}
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span
                   className="text-sm font-bold"
@@ -374,9 +573,17 @@ export function NodeCluster({
                   {node.pricePerHour}
                 </span>
               </div>
-              {/* Action icon: col 2, rowspan 2 — wallet-bound: Deploy (available) / Undeploy (my node) / Not operable (other's) */}
               <div className="row-span-2 flex items-start pt-0.5">
-                {node.status === "SYNCING" || node.status === "PENDING" ? (
+                {node.status === "PENDING" ? (
+                  <span
+                    className="flex h-9 w-9 shrink-0 cursor-not-allowed items-center justify-center rounded opacity-80"
+                    style={{ color: "#ffc800" }}
+                    title="Pending FRP verification — not rentable until backend confirms physical link and FRP"
+                    aria-label="Pending verification"
+                  >
+                    <Lock className="h-5 w-5" />
+                  </span>
+                ) : node.status === "SYNCING" ? (
                   <button
                     type="button"
                     disabled
@@ -463,15 +670,13 @@ export function NodeCluster({
                   </button>
                 )}
               </div>
-              {/* Line 2: GPU/VRAM + generic metadata (no FRP connection strings) */}
               <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-0.5 font-mono text-xs" style={{ color: "rgba(0,255,65,0.6)" }}>
                 <span className="truncate" title={node.gpus}>{node.gpus}</span>
                 <span>{node.vram}</span>
                 <span>[Encrypted Tunnel Ready]</span>
-                <span>Bandwidth: 1 Gbps Limit</span>
+                <span>Bandwidth: {node.bandwidth}</span>
                 <span>Status: Idle</span>
               </div>
-              {/* Line 3: Progress bar + utilization */}
               <div className="flex min-w-0 items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <GpuBar
@@ -525,7 +730,7 @@ export function NodeCluster({
               {actionModal.type === "deploy" ? (
                 <>
                   <p className="text-xs" style={{ color: "rgba(0,255,65,0.6)" }}>
-                    Confirm you want to deploy to this node. Protocol fee (5%) applies. This is not a misclick?
+                    Confirm you want to deploy to this node. Payment in USDT: 95% to miner, 5% to protocol treasury.
                   </p>
                   <div
                     className="flex flex-col items-center gap-2 border p-4"
@@ -548,11 +753,19 @@ export function NodeCluster({
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={onConfirmDeploy}
-                      className="flex-1 border px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors hover:opacity-90"
+                      onClick={() => void onConfirmDeploy()}
+                      disabled={deployTxPending}
+                      className="flex-1 border px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors hover:opacity-90 disabled:opacity-50"
                       style={{ borderColor: "#00FF41", color: "#00FF41" }}
                     >
-                      Confirm Deploy
+                      {deployTxPending ? (
+                        <>
+                          <Loader2 className="mr-2 inline h-3.5 w-3.5 animate-spin" />
+                          Paying…
+                        </>
+                      ) : (
+                        "Confirm Deploy"
+                      )}
                     </button>
                     <button
                       type="button"

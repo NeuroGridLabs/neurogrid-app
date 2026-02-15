@@ -17,11 +17,12 @@ interface TerminalLine {
 }
 
 const INITIAL_LINES: TerminalLine[] = [
-  { type: "SYSTEM", content: "NeuroGrid Protocol v3.0 -- Admin Terminal" },
+  { type: "SYSTEM", content: "NeuroGrid Protocol v3.4 -- Admin Terminal" },
   { type: "SYSTEM", content: "Type 'help' for available commands." },
-  { type: "NETWORK", content: "Genesis Node Alpha-01 [ONLINE] | RTX4090 | 24GB VRAM | [Encrypted Tunnel Ready]" },
-  { type: "PHYSICAL", content: "GPU temp: 64C | VRAM: 18.4/24GB | Fan: 72%" },
-  { type: "NETWORK", content: "FRP tunnel status: ACTIVE | Latency: 12ms | Uptime: 99.97%" },
+  { type: "NETWORK", content: "Genesis Node Alpha-01 [STANDBY - BOOTSTRAPPING]" },
+  { type: "PHYSICAL", content: "Hardware: Locked [RTX 4090 Pool] | Awaiting Whitelist Ignition" },
+  { type: "NETWORK", content: "FRP tunnel status: PENDING_IGNITION | Ping: Awaiting Gateway" },
+  { type: "SYSTEM", content: "Polling Genesis Smart Contract for ignition signal..." },
 ]
 
 const COMMAND_MAP: Record<string, TerminalLine[]> = {
@@ -101,21 +102,18 @@ export function SmartTerminal({
   const inputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Slow auto-feed — viewport is fixed, no layout jump
+  // Epoch 0: no fake metrics — polling message only
   useEffect(() => {
     const messages: TerminalLine[] = [
-      { type: "NETWORK", content: "FRP heartbeat: [Gateway] -> Alpha-01 (12ms)" },
-      { type: "PHYSICAL", content: "GPU temp stable: 64C | Fan: 72%" },
-      { type: "NETWORK", content: "PoI challenge #12,484: Alpha-01 PASSED" },
-      { type: "NETWORK", content: "Inference job #47,292 completed (LLaMA-70B, 338ms)" },
-      { type: "PHYSICAL", content: "VRAM allocation: 18.6/24GB" },
+      { type: "SYSTEM", content: "Polling Genesis Smart Contract for ignition signal..." },
+      { type: "NETWORK", content: "FRP tunnel status: PENDING_IGNITION | Ping: Awaiting Gateway" },
     ]
     let i = 0
     const interval = setInterval(() => {
       const msg = messages[i % messages.length]
       setLines((prev) => [...prev, { ...msg, timestamp: getTimestamp() }])
       i++
-    }, 8000)
+    }, 10000)
     return () => clearInterval(interval)
   }, [])
 

@@ -1,15 +1,14 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { NeonButton } from "@/components/atoms/neon-button"
 
-/** Mock top-earning nodes for guest view (long-running, high revenue) */
-const MOCK_TOP_EARNERS = [
-  { name: "Alpha-01", runtime: "89d 12h", unitPrice: "$0.59/hr", totalRevenue: "$1,247" },
-  { name: "Theta-08", runtime: "76d 8h", unitPrice: "$0.65/hr", totalRevenue: "$1,189" },
-  { name: "Delta-03", runtime: "62d 4h", unitPrice: "$1.85/hr", totalRevenue: "$2,756" },
-  { name: "Zeta-15", runtime: "54d 0h", unitPrice: "$1.20/hr", totalRevenue: "$1,555" },
-  { name: "Epsilon-09", runtime: "41d 6h", unitPrice: "$0.55/hr", totalRevenue: "$544" },
-]
+interface TopEarnerRow {
+  name: string
+  runtime: string
+  unitPrice: string
+  totalRevenue: string
+}
 
 interface NodeOnboardingPanelProps {
   isConnected: boolean
@@ -17,12 +16,34 @@ interface NodeOnboardingPanelProps {
   children: React.ReactNode
 }
 
-/** Fixed-size Node Onboarding panel: when not connected shows platform revenue + top earners + CTA; when connected shows the registration form (children). */
+/** Fixed-size Node Onboarding panel: when not connected shows platform revenue + top earners from API + CTA; when connected shows the registration form (children). */
 export function NodeOnboardingPanel({
   isConnected,
   onConnectWallet,
   children,
 }: NodeOnboardingPanelProps) {
+  const [topEarners, setTopEarners] = useState<TopEarnerRow[]>([])
+  const [platformStats, setPlatformStats] = useState<{ nodeCount: number; total30d: string } | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (isConnected) return
+    let cancelled = false
+    setLoading(true)
+    fetch("/api/nodes/top-earners", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data: { topEarners?: TopEarnerRow[] }) => {
+        if (!cancelled && Array.isArray(data.topEarners)) setTopEarners(data.topEarners)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isConnected])
+
   return (
     <div
       className="border border-border flex flex-col overflow-hidden"
@@ -42,7 +63,7 @@ export function NodeOnboardingPanel({
 
       {!isConnected ? (
         <div className="flex flex-1 flex-col gap-4 overflow-hidden p-4">
-          {/* Platform overall revenue */}
+          {/* Platform overall revenue — from backend when available */}
           <div
             className="rounded border px-3 py-2"
             style={{
@@ -54,19 +75,25 @@ export function NodeOnboardingPanel({
               Platform node revenue
             </div>
             <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0">
-              <span className="text-lg font-bold" style={{ color: "#00FFFF" }}>
-                12 nodes
-              </span>
-              <span className="text-xs" style={{ color: "rgba(0,255,255,0.5)" }}>
-                ·
-              </span>
-              <span className="text-sm font-medium" style={{ color: "#00FF41" }}>
-                $7,291 total (30d)
-              </span>
+              {platformStats ? (
+                <>
+                  <span className="text-lg font-bold" style={{ color: "#00FFFF" }}>
+                    {platformStats.nodeCount} nodes
+                  </span>
+                  <span className="text-xs" style={{ color: "rgba(0,255,255,0.5)" }}>·</span>
+                  <span className="text-sm font-medium" style={{ color: "#00FF41" }}>
+                    {platformStats.total30d} total (30d)
+                  </span>
+                </>
+              ) : (
+                <span className="text-sm" style={{ color: "rgba(0,255,255,0.5)" }}>
+                  —
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Top earners list */}
+          {/* Top earners list — real data from API */}
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="mb-1 text-xs uppercase tracking-wider" style={{ color: "rgba(0,255,65,0.5)" }}>
               Top earning nodes
@@ -93,24 +120,37 @@ export function NodeOnboardingPanel({
                   </tr>
                 </thead>
                 <tbody style={{ color: "rgba(0,255,65,0.85)" }}>
-                  {MOCK_TOP_EARNERS.map((row) => (
-                    <tr key={row.name} className="border-t" style={{ borderColor: "rgba(0,255,65,0.08)" }}>
-                      <td className="px-2 py-1.5 font-medium" style={{ color: "#00FF41" }}>
-                        {row.name}
-                      </td>
-                      <td className="px-2 py-1.5">{row.runtime}</td>
-                      <td className="px-2 py-1.5">{row.unitPrice}</td>
-                      <td className="px-2 py-1.5 text-right font-medium" style={{ color: "#00FFFF" }}>
-                        {row.totalRevenue}
+                  {loading ? (
+                    <tr>
+                      <td colSpan={4} className="px-2 py-4 text-center" style={{ color: "rgba(0,255,65,0.5)" }}>
+                        Loading…
                       </td>
                     </tr>
-                  ))}
+                  ) : topEarners.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-2 py-4 text-center" style={{ color: "rgba(0,255,65,0.5)" }}>
+                        No data yet
+                      </td>
+                    </tr>
+                  ) : (
+                    topEarners.map((row) => (
+                      <tr key={row.name} className="border-t" style={{ borderColor: "rgba(0,255,65,0.08)" }}>
+                        <td className="px-2 py-1.5 font-medium" style={{ color: "#00FF41" }}>
+                          {row.name}
+                        </td>
+                        <td className="px-2 py-1.5">{row.runtime}</td>
+                        <td className="px-2 py-1.5">{row.unitPrice}</td>
+                        <td className="px-2 py-1.5 text-right font-medium" style={{ color: "#00FFFF" }}>
+                          {row.totalRevenue}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* CTA */}
           <p className="shrink-0 text-center text-xs" style={{ color: "rgba(0,255,255,0.5)" }}>
             Connect wallet to register your GPU and start earning.
           </p>

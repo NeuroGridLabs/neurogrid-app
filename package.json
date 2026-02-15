@@ -6,7 +6,8 @@
     "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "rebuild": "npm rebuild"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -37,7 +38,12 @@
     "@radix-ui/react-toggle": "1.1.1",
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
-    "@rainbow-me/rainbowkit": "^2.2.10",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/wallet-adapter-base": "^0.9.23",
+    "@solana/wallet-adapter-react": "^0.15.39",
+    "@solana/wallet-adapter-react-ui": "^0.9.39",
+    "@solana/wallet-adapter-wallets": "^0.19.37",
+    "@solana/web3.js": "^1.98.4",
     "@tanstack/react-query": "^5.90.21",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
@@ -61,8 +67,6 @@
     "tailwind-merge": "^2.6.1",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^1.1.2",
-    "viem": "^2.45.3",
-    "wagmi": "^3.4.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {

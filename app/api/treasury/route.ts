@@ -9,7 +9,9 @@ export async function GET() {
     const data = await fetchTreasuryData()
     return NextResponse.json(data)
   } catch (e) {
-    console.error("[Treasury API]", e)
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[Treasury API] Unexpected error:", e instanceof Error ? e.message : "Unknown")
+    }
     return NextResponse.json(
       { error: "Treasury fetch failed" },
       { status: 500 }

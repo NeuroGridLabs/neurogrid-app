@@ -16,19 +16,26 @@ import { NeonButton } from "@/components/atoms/neon-button"
 
 export default function MinerPortal() {
   const { isConnected, address, openConnectModal } = useWallet()
-  const { registerMiner, getPriceRangeForGpu, getAvailableNodeId } = useMinerRegistry()
+  const {
+    registerMiner,
+    registerMinerWithNodeId,
+    getPriceRangeForGpu,
+    getAvailableNodeId,
+  } = useMinerRegistry()
   const [handshakeActive, setHandshakeActive] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [connectTriggered, setConnectTriggered] = useState(false)
   const [registerError, setRegisterError] = useState<string | null>(null)
   const [lastRegisteredNodeId, setLastRegisteredNodeId] = useState<string | null>(null)
+  const [pendingVerification, setPendingVerification] = useState(false)
 
   const priceRange = getPriceRangeForGpu("1x RTX4090")
   const canRegister = getAvailableNodeId() !== null
 
   const handleFormSubmit = useCallback(
-    (payload: MinerFormSubmitPayload) => {
+    async (payload: MinerFormSubmitPayload) => {
       setRegisterError(null)
+      setPendingVerification(false)
       if (!isConnected || !address) {
         setRegisterError("Wallet not connected.")
         return
@@ -37,19 +44,60 @@ export default function MinerPortal() {
         setRegisterError("No available node slot. All miners are currently registered.")
         return
       }
-      const nodeId = registerMiner(address, {
-        pricePerHour: payload.pricePerHour,
-        bandwidth: payload.bandwidth,
-      })
-      if (nodeId == null) {
-        setRegisterError("No available node slot. All miners are currently registered.")
-        return
+
+      try {
+        const res = await fetch("/api/miner/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            walletAddress: address,
+            pricePerHour: payload.pricePerHour,
+            bandwidth: payload.bandwidth,
+            gpuModel: payload.gpuModel,
+            vram: payload.vram,
+            gateway: payload.gateway,
+          }),
+        })
+        const data = res.ok ? await res.json() : null
+        const nodeIdFromApi = data?.nodeId
+        const isPendingVerification = data?.status === "PENDING_VERIFICATION"
+
+        let nodeId: string | null = null
+        if (nodeIdFromApi) {
+          nodeId = registerMinerWithNodeId(nodeIdFromApi, address, {
+            pricePerHour: payload.pricePerHour,
+            bandwidth: payload.bandwidth,
+          })
+        }
+        if (nodeId == null) {
+          nodeId = registerMiner(address, {
+            pricePerHour: payload.pricePerHour,
+            bandwidth: payload.bandwidth,
+          })
+        }
+        if (nodeId == null) {
+          setRegisterError("No available node slot. All miners are currently registered.")
+          return
+        }
+        setLastRegisteredNodeId(nodeId)
+        setPendingVerification(!!isPendingVerification)
+        setConnectTriggered(true)
+        setHandshakeActive(true)
+      } catch {
+        const nodeId = registerMiner(address, {
+          pricePerHour: payload.pricePerHour,
+          bandwidth: payload.bandwidth,
+        })
+        if (nodeId == null) {
+          setRegisterError("No available node slot. All miners are currently registered.")
+          return
+        }
+        setLastRegisteredNodeId(nodeId)
+        setConnectTriggered(true)
+        setHandshakeActive(true)
       }
-      setLastRegisteredNodeId(nodeId)
-      setConnectTriggered(true)
-      setHandshakeActive(true)
     },
-    [isConnected, address, canRegister, registerMiner]
+    [isConnected, address, canRegister, registerMiner, registerMinerWithNodeId]
   )
 
   const handleHandshakeComplete = useCallback(() => {
@@ -110,26 +158,46 @@ export default function MinerPortal() {
           <div
             className="flex flex-col gap-2 border p-4"
             style={{
-              borderColor: "rgba(0,255,65,0.3)",
-              backgroundColor: "rgba(0,255,65,0.05)",
+              borderColor: pendingVerification ? "rgba(255,200,0,0.4)" : "rgba(0,255,65,0.3)",
+              backgroundColor: pendingVerification ? "rgba(255,200,0,0.05)" : "rgba(0,255,65,0.05)",
             }}
           >
             <div className="flex items-center gap-3">
               <span
                 className="inline-block h-2 w-2 rounded-full shrink-0"
-                style={{ backgroundColor: "#00FF41", boxShadow: "0 0 6px #00FF41" }}
+                style={{
+                  backgroundColor: pendingVerification ? "#ffc800" : "#00FF41",
+                  boxShadow: pendingVerification ? "0 0 6px #ffc800" : "0 0 6px #00FF41",
+                }}
               />
-              <span className="text-sm font-medium" style={{ color: "#00FF41" }}>
-                {NODE_DISPLAY_NAMES[lastRegisteredNodeId] ?? lastRegisteredNodeId} successfully registered. PoI verification pending.
+              <span className="text-sm font-medium" style={{ color: pendingVerification ? "#ffc800" : "#00FF41" }}>
+                {NODE_DISPLAY_NAMES[lastRegisteredNodeId] ?? lastRegisteredNodeId}{" "}
+                {pendingVerification ? "— Pending FRP verification" : "registered."}
               </span>
             </div>
-            <p className="text-xs pl-5" style={{ color: "rgba(0,255,65,0.7)" }}>
-              It is now listed in{" "}
-              <Link href="/nodes" className="underline hover:no-underline" style={{ color: "#00FFFF" }}>
-                Node Command Center
-              </Link>{" "}
-              on the Nodes page. You can see it in My Registered Miners (Pricing Configuration panel).
-            </p>
+            {pendingVerification ? (
+              <div className="space-y-1 pl-5 text-xs" style={{ color: "rgba(255,255,255,0.75)" }}>
+                <p>
+                  The backend will verify <strong>physical connectivity</strong> and <strong>FRP handshake</strong>.
+                  Only after FRP is established will this node appear as <strong>ACTIVE</strong> in{" "}
+                  <Link href="/nodes" className="underline hover:no-underline" style={{ color: "#00FFFF" }}>
+                    Node Command Center
+                  </Link>{" "}
+                  and be rentable.
+                </p>
+                <p style={{ color: "rgba(255,255,255,0.5)" }}>
+                  Connect your FRP client using the config from the backend. Without a real backend, the node stays in PENDING and is not rentable.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs pl-5" style={{ color: "rgba(0,255,65,0.7)" }}>
+                It is listed in{" "}
+                <Link href="/nodes" className="underline hover:no-underline" style={{ color: "#00FFFF" }}>
+                  Node Command Center
+                </Link>{" "}
+                (Nodes page). You can see it in My Registered Miners (Pricing Configuration panel). Connect backend + FRP for verification.
+              </p>
+            )}
           </div>
         )}
 
